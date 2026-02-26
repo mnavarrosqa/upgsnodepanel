@@ -86,9 +86,16 @@ else
 fi
 
 echo "[*] Installing Node dependencies and building client..."
+# Clean install so native modules (e.g. node-linux-pam) are built for this system, not copied from another OS
+rm -rf node_modules client/node_modules
 npm install
-# Ensure PAM module is built for this system (needed for login with system credentials)
-npm rebuild node-linux-pam 2>/dev/null || echo "[!] node-linux-pam rebuild failed; login may show 'PAM not available'. Install libpam0g-dev and run: npm rebuild node-linux-pam"
+# Build PAM module for login with system credentials (libpam0g-dev already installed above)
+if ! npm rebuild node-linux-pam 2>/dev/null; then
+  npm install node-linux-pam --build-from-source 2>/dev/null || true
+fi
+if ! node --input-type=module -e "import('node-linux-pam').then(() => console.log('PAM OK')).catch(e => { console.error('PAM load failed:', e.message); process.exit(1); })" 2>/dev/null; then
+  echo "[!] PAM module could not be loaded. Login will not work with system credentials. Check: libpam0g-dev installed, run npm rebuild node-linux-pam in $INSTALL_DIR"
+fi
 cd client && npm install && npm run build && cd ..
 
 echo "[*] Creating .env..."
