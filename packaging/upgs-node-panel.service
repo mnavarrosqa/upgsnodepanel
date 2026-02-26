@@ -8,7 +8,8 @@ User=root
 WorkingDirectory=/opt/upgs-node-panel
 EnvironmentFile=/opt/upgs-node-panel/.env
 Environment=NODE_ENV=production
-ExecStart=/usr/bin/env node server/index.js
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/local/bin/node server/index.js
 Restart=on-failure
 RestartSec=5
 

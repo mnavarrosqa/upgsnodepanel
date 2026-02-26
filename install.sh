@@ -88,18 +88,19 @@ mkdir -p "$APPS_BASE_PATH"
 mkdir -p "$NGINX_APPS_CONF_DIR"
 
 echo "[*] Installing systemd unit..."
-NODE_BIN="$(command -v node)"
-# Ensure PATH for the service includes node/pm2 (in case /usr/local/bin is not in systemd's default PATH)
 cp packaging/upgs-node-panel.service /etc/systemd/system/
 sed -i "s|/opt/upgs-node-panel|$INSTALL_DIR|g" /etc/systemd/system/upgs-node-panel.service
-sed -i "s|^ExecStart=.*|ExecStart=$NODE_BIN server/index.js|" /etc/systemd/system/upgs-node-panel.service
-# Prepend PATH so node and pm2 are found when the panel runs (e.g. pm2 for managed apps)
-if ! grep -q '^Environment=PATH=' /etc/systemd/system/upgs-node-panel.service; then
-  sed -i "/^Environment=NODE_ENV/a Environment=PATH=/usr/local/bin:/usr/bin:/bin" /etc/systemd/system/upgs-node-panel.service
-fi
 systemctl daemon-reload
 systemctl enable upgs-node-panel
 systemctl start upgs-node-panel
+if ! systemctl is-active --quiet upgs-node-panel; then
+  echo "[!] Panel service failed to start. Status:"
+  systemctl status upgs-node-panel --no-pager || true
+  echo ""
+  echo "Recent logs:"
+  journalctl -u upgs-node-panel -n 20 --no-pager || true
+  exit 1
+fi
 
 echo "[*] Configuring nginx for panel..."
 NGINX_PANEL_CONF="/etc/nginx/conf.d/upgs-panel.conf"
