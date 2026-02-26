@@ -69,6 +69,8 @@ async function load() {
   } catch (_) {}
 }
 
+onMounted(load);
+
 function buildLog(data) {
   const out = (data.stdout || '').trim();
   const err = (data.stderr || '').trim();
