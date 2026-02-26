@@ -96,10 +96,11 @@ export function createApp(data) {
     INSERT INTO apps (name, repo_url, branch, install_cmd, build_cmd, start_cmd, node_version, port, domain, ssl_enabled)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
+  const branchVal = (data.branch != null && data.branch !== '') ? data.branch : null;
   const result = stmt.run(
     data.name,
     data.repo_url,
-    data.branch || 'main',
+    branchVal,
     data.install_cmd || 'npm install',
     data.build_cmd || null,
     data.start_cmd || 'npm start',

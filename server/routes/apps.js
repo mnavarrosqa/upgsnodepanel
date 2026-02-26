@@ -48,7 +48,7 @@ appsRouter.post('/', async (req, res, next) => {
       createData = {
         name: validated.name,
         repo_url: validated.repo_url,
-        branch: validated.branch ?? 'main',
+        branch: validated.branch ?? null,
         install_cmd: validated.install_cmd ?? 'npm install',
         build_cmd: validated.build_cmd ?? null,
         start_cmd: validated.start_cmd ?? 'npm start',
@@ -158,9 +158,15 @@ appsRouter.delete('/:id', (req, res, next) => {
   try {
     const app = db.getApp(req.params.id);
     if (!app) return res.status(404).json({ error: 'App not found' });
+    const dir = appManager.appDir(app);
     appManager.deleteFromPm2(app);
     appManager.teardownNginx(app);
     db.deleteApp(req.params.id);
+    try {
+      if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true });
+    } catch (err) {
+      console.warn('Could not remove app directory:', dir, err.message);
+    }
     res.json({ ok: true });
   } catch (e) {
     next(e);

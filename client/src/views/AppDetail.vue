@@ -101,12 +101,25 @@
       <button type="button" class="btn" @click="loadLogs" style="margin-top:0.5rem;" :disabled="saving">Refresh logs</button>
     </div>
     </div>
-    <div v-if="showDeleteModal" class="modal-overlay" @click.self="showDeleteModal = false">
-      <div class="card modal">
-        <p>Delete <strong>{{ app.name }}</strong>? This will stop the app, remove it from PM2 and nginx, and remove the app record. The app directory on disk may remain.</p>
-        <div class="action-btns" style="margin-top:1rem;">
-          <button type="button" class="btn btn-danger" @click="doDelete" :disabled="deleting">Delete</button>
-          <button type="button" class="btn" @click="showDeleteModal = false">Cancel</button>
+    <div v-if="showDeleteModal" class="modal-overlay" @click.self="closeDeleteModal">
+      <div class="confirm-dialog confirm-dialog--danger">
+        <div class="confirm-dialog__icon" aria-hidden="true">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+        </div>
+        <h3 class="confirm-dialog__title">Delete app</h3>
+        <p class="confirm-dialog__message">Permanently delete <strong>{{ app.name }}</strong>? This cannot be undone.</p>
+        <ul class="confirm-dialog__list">
+          <li>Stop and remove from PM2</li>
+          <li>Remove nginx config (if any)</li>
+          <li>Remove app record from the panel</li>
+          <li>Delete the app folder on disk (source code, .env, everything)</li>
+        </ul>
+        <p v-if="deleteError" class="confirm-dialog__error">{{ deleteError }}</p>
+        <div class="confirm-dialog__actions">
+          <button type="button" class="btn" @click="closeDeleteModal" :disabled="deleting">Cancel</button>
+          <button type="button" class="btn btn-danger" @click="doDelete" :disabled="deleting">
+            {{ deleting ? 'Deleting…' : 'Delete permanently' }}
+          </button>
         </div>
       </div>
     </div>
@@ -117,10 +130,11 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { api } from '../api';
 
 const route = useRoute();
+const router = useRouter();
 const app = ref(null);
 const edit = ref({ domain: '', ssl_enabled: false, node_version: '', install_cmd: '', build_cmd: '', start_cmd: '' });
 const nodeVersions = ref([]);
@@ -136,6 +150,7 @@ const saving = ref(false);
 const busy = ref(false);
 const showDeleteModal = ref(false);
 const deleting = ref(false);
+const deleteError = ref('');
 const loadError = ref('');
 const envContent = ref('');
 const savingEnv = ref(false);
@@ -267,16 +282,27 @@ async function runBuild() {
   }
 }
 
+function closeDeleteModal() {
+  if (deleting.value) return;
+  showDeleteModal.value = false;
+  deleteError.value = '';
+}
+
 function confirmDelete() {
+  deleteError.value = '';
   showDeleteModal.value = true;
 }
 
 async function doDelete() {
+  deleteError.value = '';
   deleting.value = true;
   try {
     await api.apps.remove(route.params.id);
-    window.location.href = '/apps';
-  } catch (_) {
+    closeDeleteModal();
+    router.push('/apps');
+  } catch (e) {
+    deleteError.value = e.message || 'Delete failed';
+  } finally {
     deleting.value = false;
   }
 }
@@ -332,6 +358,61 @@ async function doDelete() {
   align-items: center;
   justify-content: center;
   z-index: 100;
+  padding: 1rem;
+}
+.confirm-dialog {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  max-width: 420px;
+  width: 100%;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+}
+.confirm-dialog--danger {
+  border-color: var(--danger);
+}
+.confirm-dialog__icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--danger);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+.confirm-dialog__title {
+  margin: 0 0 0.5rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+.confirm-dialog__message {
+  margin: 0 0 1rem;
+  font-size: 0.9375rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.confirm-dialog__message strong {
+  color: var(--text);
+}
+.confirm-dialog__list {
+  margin: 0 0 1.25rem;
+  padding-left: 1.25rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+.confirm-dialog__error {
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+  color: var(--danger);
+}
+.confirm-dialog__actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
 }
 .modal {
   max-width: 420px;

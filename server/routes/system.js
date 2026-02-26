@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import dns from 'dns/promises';
-import { run } from '../lib/exec.js';
+import { run, runGit } from '../lib/exec.js';
 
 export const systemRouter = Router();
 
@@ -55,6 +55,38 @@ systemRouter.get('/check-domain', async (req, res, next) => {
           ? `Domain points to this server (${serverIp})`
           : `Domain resolves to ${addresses.join(', ')} (this server: ${serverIp})`,
     });
+  } catch (e) {
+    next(e);
+  }
+});
+
+systemRouter.get('/default-branch', (req, res, next) => {
+  try {
+    const url = (req.query.url || '').toString().trim();
+    if (!url) return res.status(400).json({ error: 'URL required' });
+    if (!/^https?:/.test(url) || /[\s;|&$`'"]/.test(url)) {
+      return res.status(400).json({ error: 'Invalid repository URL' });
+    }
+    let branch = null;
+    try {
+      const { stdout } = runGit(['ls-remote', '--symref', url, 'HEAD'], {});
+      const match = (stdout || '').match(/ref:\s*refs\/heads\/(\S+)/);
+      if (match) branch = match[1].trim();
+    } catch (_) {}
+    if (!branch) {
+      try {
+        const { stdout: outMain } = runGit(['ls-remote', url, 'refs/heads/main'], {});
+        if (outMain && outMain.trim()) branch = 'main';
+      } catch (_) {}
+    }
+    if (!branch) {
+      try {
+        const { stdout: outMaster } = runGit(['ls-remote', url, 'refs/heads/master'], {});
+        if (outMaster && outMaster.trim()) branch = 'master';
+      } catch (_) {}
+    }
+    if (!branch) return res.status(404).json({ error: 'Could not detect default branch' });
+    res.json({ branch });
   } catch (e) {
     next(e);
   }

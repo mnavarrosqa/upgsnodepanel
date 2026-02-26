@@ -110,5 +110,6 @@ export const api = {
   system: {
     ip: () => request('/api/system/ip'),
     checkDomain: (domain) => request(`/api/system/check-domain?domain=${encodeURIComponent(domain)}`),
+    defaultBranch: (url) => request(`/api/system/default-branch?url=${encodeURIComponent(url)}`),
   },
 };

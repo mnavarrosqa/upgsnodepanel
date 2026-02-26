@@ -14,11 +14,23 @@
         </div>
         <div class="form-group">
           <label>Repository URL</label>
-          <input v-model="form.repo_url" type="url" required placeholder="https://github.com/user/repo.git" />
+          <input
+            v-model="form.repo_url"
+            type="url"
+            required
+            placeholder="https://github.com/user/repo.git"
+            @blur="fetchDefaultBranchIfEmpty"
+          />
         </div>
         <div class="form-group">
           <label>Branch</label>
-          <input v-model="form.branch" type="text" placeholder="main" />
+          <input
+            v-model="form.branch"
+            type="text"
+            placeholder="Auto (main or master)"
+            @focus="fetchDefaultBranchIfEmpty"
+          />
+          <p v-if="branchDetected" class="domain-check domain-check--ok">{{ branchDetected }}</p>
         </div>
         <div class="form-group">
           <label>Node version</label>
@@ -121,6 +133,7 @@ const creationStep = ref('');
 const creationLogs = ref('');
 const domainCheckStatus = ref('');
 const domainCheckMessage = ref('');
+const branchDetected = ref('');
 const nodeVersions = ref([]);
 const form = ref({
   name: '',
@@ -161,6 +174,7 @@ function closeForm() {
   showForm.value = false;
   domainCheckStatus.value = '';
   domainCheckMessage.value = '';
+  branchDetected.value = '';
 }
 
 async function checkDomain() {
@@ -181,6 +195,21 @@ async function checkDomain() {
     domainCheckStatus.value = 'error';
     domainCheckMessage.value = e.message || 'Domain check failed';
   }
+}
+
+async function fetchDefaultBranchIfEmpty() {
+  const url = (form.value.repo_url || '').trim();
+  const branch = (form.value.branch || '').trim();
+  branchDetected.value = '';
+  if (!url || branch) return;
+  if (!/^https?:/.test(url)) return;
+  try {
+    const data = await api.system.defaultBranch(url);
+    if (data.branch) {
+      form.value.branch = data.branch;
+      branchDetected.value = `Default branch: ${data.branch}`;
+    }
+  } catch (_) {}
 }
 
 onMounted(() => {
@@ -224,11 +253,12 @@ async function create() {
       if (ev.error) createError.value = ev.error;
     });
     showForm.value = false;
-    form.value = { name: '', repo_url: '', branch: 'main', node_version: nodeVersions.value[0] || '20', install_cmd: 'npm install', build_cmd: '', start_cmd: 'npm start', domain: '', ssl_enabled: false };
+    form.value = { name: '', repo_url: '', branch: '', node_version: nodeVersions.value[0] || '20', install_cmd: 'npm install', build_cmd: '', start_cmd: 'npm start', domain: '', ssl_enabled: false };
     creationStep.value = '';
     creationLogs.value = '';
     domainCheckStatus.value = '';
     domainCheckMessage.value = '';
+    branchDetected.value = '';
     load();
   } catch (e) {
     createError.value = e.message || 'Create failed';

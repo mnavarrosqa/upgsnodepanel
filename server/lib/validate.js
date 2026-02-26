@@ -43,10 +43,11 @@ export function validateRepoUrl(url) {
   }
 }
 
+/** Returns branch string or null if empty (meaning auto-detect default branch). */
 export function validateBranch(branch) {
-  if (branch == null || typeof branch !== 'string') return 'main';
+  if (branch == null || typeof branch !== 'string') return null;
   const s = branch.trim();
-  if (!s) return 'main';
+  if (!s) return null;
   checkLength(s, MAX_LEN.branch, 'branch');
   if (!SAFE_BRANCH.test(s)) {
     throw new Error('branch may only contain letters, numbers, /, ., _, -');

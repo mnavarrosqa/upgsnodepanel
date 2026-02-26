@@ -27,43 +27,52 @@ function appDir(app) {
 
 /**
  * Clones or updates the app repo. Returns { dir, actualBranch }.
- * If branch is 'main' and the repo only has 'master', checks out 'master' and returns actualBranch: 'master'.
+ * If app.branch is empty/null, uses the repo's default branch (auto-detect). Otherwise checks out the given branch (with main→master fallback).
  */
 export function cloneApp(app) {
   const dir = appDir(app);
-  const branch = app.branch || 'main';
+  const branch = (app.branch != null && String(app.branch).trim() !== '') ? String(app.branch).trim() : null;
   try {
     fs.mkdirSync(APPS_BASE, { recursive: true });
   } catch (_) {}
   if (fs.existsSync(dir)) {
     runGit(['fetch'], { cwd: dir });
-    runGit(['checkout', branch], { cwd: dir });
+    const checkoutBranch = branch || getDefaultBranchInRepo(dir);
+    runGit(['checkout', checkoutBranch], { cwd: dir });
     runGit(['pull'], { cwd: dir });
-    return { dir, actualBranch: branch };
+    return { dir, actualBranch: checkoutBranch };
   }
-  // Clone without -b so we get the repo's default branch (main or master)
   runGit(['clone', app.repo_url, dir], {});
-  let actualBranch = branch;
-  try {
-    runGit(['checkout', branch], { cwd: dir });
-  } catch (e) {
-    if (branch === 'main') {
-      try {
-        runGit(['checkout', 'master'], { cwd: dir });
-        actualBranch = 'master';
-      } catch (_) {
-        const msg = (e.message || '').toLowerCase();
-        const hint = msg.includes('main')
-          ? " Branch 'main' not found. Try setting branch to 'master' if the repo uses it."
-          : ` Branch '${branch}' not found in the repository.`;
-        throw new Error((e.message || 'Checkout failed').trim() + hint);
+  let actualBranch;
+  if (branch) {
+    actualBranch = branch;
+    try {
+      runGit(['checkout', branch], { cwd: dir });
+    } catch (e) {
+      if (branch === 'main') {
+        try {
+          runGit(['checkout', 'master'], { cwd: dir });
+          actualBranch = 'master';
+        } catch (_) {
+          const msg = (e.message || '').toLowerCase();
+          const hint = msg.includes('main')
+            ? " Branch 'main' not found. Try setting branch to 'master' or leave empty for auto."
+            : ` Branch '${branch}' not found in the repository.`;
+          throw new Error((e.message || 'Checkout failed').trim() + hint);
+        }
+      } else {
+        throw new Error((e.message || 'Checkout failed').trim() + ` Branch '${branch}' not found.`);
       }
-    } else {
-      const hint = ` Branch '${branch}' not found in the repository.`;
-      throw new Error((e.message || 'Checkout failed').trim() + hint);
     }
+  } else {
+    actualBranch = getDefaultBranchInRepo(dir);
   }
   return { dir, actualBranch };
+}
+
+function getDefaultBranchInRepo(dir) {
+  const { stdout } = runGit(['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: dir });
+  return (stdout || '').trim() || 'main';
 }
 
 export function runInstall(app) {
