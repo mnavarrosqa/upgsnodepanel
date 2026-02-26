@@ -74,12 +74,18 @@ app.use((err, req, res, next) => {
 if (isProduction) {
   try {
     const apps = db.listApps();
-    for (const a of apps) {
-      if (a.domain) nginx.writeAppConfig(a);
+    const withDomain = apps.filter((a) => a.domain && String(a.domain).trim());
+    if (withDomain.length > 0) {
+      const dir = process.env.NGINX_APPS_CONF_DIR || '/etc/nginx/conf.d';
+      for (const a of withDomain) {
+        nginx.writeAppConfig(a);
+      }
+      nginx.reloadNginx();
+      console.log(`Nginx: wrote ${withDomain.length} app vhost(s) to ${dir}`);
     }
-    nginx.reloadNginx();
   } catch (e) {
-    console.warn('Nginx app config sync at startup:', e.message);
+    console.error('Nginx app config sync at startup failed:', e.message);
+    if (e.stack) console.error(e.stack);
   }
 }
 
