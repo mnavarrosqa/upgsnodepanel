@@ -21,7 +21,13 @@
         </div>
         <div class="form-group">
           <label>Node version</label>
-          <input v-model="form.node_version" type="text" placeholder="20" />
+          <select v-if="nodeVersions.length" v-model="form.node_version">
+            <option v-for="v in nodeVersions" :key="v" :value="v">{{ v }}</option>
+          </select>
+          <template v-else>
+            <input v-model="form.node_version" type="text" placeholder="20" />
+            <p style="margin:0.25rem 0 0; font-size:0.8rem; color:var(--text-muted);">No versions installed. <router-link to="/node">Install one</router-link> or type a version to install later.</p>
+          </template>
         </div>
         <div class="form-group">
           <label>Install command</label>
@@ -95,6 +101,7 @@ const apps = ref([]);
 const showForm = ref(false);
 const creating = ref(false);
 const createError = ref('');
+const nodeVersions = ref([]);
 const form = ref({
   name: '',
   repo_url: '',
@@ -119,7 +126,21 @@ async function load() {
   }
 }
 
-onMounted(load);
+async function loadNodeVersions() {
+  try {
+    const data = await api.node.versions();
+    const list = data.versions || [];
+    nodeVersions.value = list;
+    if (list.length && !list.includes(form.value.node_version)) {
+      form.value.node_version = list[0];
+    }
+  } catch (_) {}
+}
+
+onMounted(() => {
+  load();
+  loadNodeVersions();
+});
 
 async function create() {
   createError.value = '';
@@ -127,7 +148,7 @@ async function create() {
   try {
     await api.apps.create(form.value);
     showForm.value = false;
-    form.value = { name: '', repo_url: '', branch: 'main', node_version: '20', install_cmd: 'npm install', build_cmd: '', start_cmd: 'npm start', domain: '', ssl_enabled: false };
+    form.value = { name: '', repo_url: '', branch: 'main', node_version: nodeVersions.value[0] || '20', install_cmd: 'npm install', build_cmd: '', start_cmd: 'npm start', domain: '', ssl_enabled: false };
     load();
   } catch (e) {
     createError.value = e.message || 'Create failed';

@@ -53,11 +53,29 @@ export function initDb() {
   return database;
 }
 
-export function getNextPort() {
+const APP_PORT_MIN = Number(process.env.APP_PORT_MIN) || 3001;
+const APP_PORT_MAX = Number(process.env.APP_PORT_MAX) || 65535;
+const PANEL_PORT = Number(process.env.PANEL_PORT) || 3000;
+
+/**
+ * Returns a random port in [APP_PORT_MIN, APP_PORT_MAX] that is not used by
+ * the panel or any existing app. Avoids collisions with already allocated ports.
+ */
+export function getAvailablePort() {
   const database = getDb();
   initSchema(database);
-  const row = database.prepare('SELECT COALESCE(MAX(port), 2999) + 1 AS next FROM apps').get();
-  return row.next;
+  const used = new Set([PANEL_PORT]);
+  const rows = database.prepare('SELECT port FROM apps').all();
+  for (const row of rows) used.add(row.port);
+  const min = Math.max(APP_PORT_MIN, 1);
+  const max = Math.min(APP_PORT_MAX, 65535);
+  const range = max - min + 1;
+  let tries = Math.min(range, 5000);
+  while (tries-- > 0) {
+    const port = min + Math.floor(Math.random() * range);
+    if (!used.has(port)) return port;
+  }
+  throw new Error('Could not find an available port');
 }
 
 export function listApps() {
@@ -73,7 +91,7 @@ export function getApp(id) {
 export function createApp(data) {
   const database = getDb();
   initSchema(database);
-  const port = data.port ?? getNextPort();
+  const port = data.port ?? getAvailablePort();
   const stmt = database.prepare(`
     INSERT INTO apps (name, repo_url, branch, install_cmd, build_cmd, start_cmd, node_version, port, domain, ssl_enabled)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)

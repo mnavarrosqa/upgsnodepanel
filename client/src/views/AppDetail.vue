@@ -53,6 +53,13 @@
           </label>
         </div>
         <div class="form-group">
+          <label>Node version</label>
+          <select v-if="nodeVersionOptions.length" v-model="edit.node_version">
+            <option v-for="v in nodeVersionOptions" :key="v" :value="v">{{ v }}</option>
+          </select>
+          <span v-else style="font-size:0.875rem; color:var(--text-muted);">{{ app.node_version || '—' }}</span>
+        </div>
+        <div class="form-group">
           <label>Install command</label>
           <input v-model="edit.install_cmd" type="text" />
         </div>
@@ -104,13 +111,20 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { api } from '../api';
 
 const route = useRoute();
 const app = ref(null);
-const edit = ref({ domain: '', ssl_enabled: false, install_cmd: '', build_cmd: '', start_cmd: '' });
+const edit = ref({ domain: '', ssl_enabled: false, node_version: '', install_cmd: '', build_cmd: '', start_cmd: '' });
+const nodeVersions = ref([]);
+const nodeVersionOptions = computed(() => {
+  const list = [...nodeVersions.value];
+  const current = edit.value.node_version;
+  if (current && !list.includes(current)) list.push(current);
+  return list.sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+});
 const serverIp = ref('');
 const logs = ref('');
 const saving = ref(false);
@@ -148,15 +162,18 @@ async function saveEnv() {
 async function load() {
   loadError.value = '';
   try {
-    const [appRes, ipRes] = await Promise.all([
+    const [appRes, ipRes, versionsRes] = await Promise.all([
       api.apps.get(route.params.id),
       api.system.ip(),
+      api.node.versions().catch(() => ({ versions: [] })),
     ]);
+    nodeVersions.value = versionsRes.versions || [];
     app.value = appRes;
     serverIp.value = ipRes.ip || '';
     edit.value = {
       domain: appRes.domain || '',
       ssl_enabled: appRes.ssl_enabled || false,
+      node_version: appRes.node_version || (nodeVersions.value[0] ?? ''),
       install_cmd: appRes.install_cmd || '',
       build_cmd: appRes.build_cmd || '',
       start_cmd: appRes.start_cmd || '',
@@ -217,6 +234,7 @@ async function save() {
     edit.value = {
       domain: updated.domain || '',
       ssl_enabled: updated.ssl_enabled || false,
+      node_version: updated.node_version || '',
       install_cmd: updated.install_cmd || '',
       build_cmd: updated.build_cmd || '',
       start_cmd: updated.start_cmd || '',

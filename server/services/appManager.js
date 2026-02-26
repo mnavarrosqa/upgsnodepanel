@@ -36,7 +36,17 @@ export function cloneApp(app) {
     runGit(['checkout', branch], { cwd: dir });
     runGit(['pull'], { cwd: dir });
   } else {
-    runGit(['clone', '-b', branch, app.repo_url, dir], {});
+    // Clone without -b so we get the repo's default branch (main or master)
+    runGit(['clone', app.repo_url, dir], {});
+    try {
+      runGit(['checkout', branch], { cwd: dir });
+    } catch (e) {
+      const msg = (e.message || '').toLowerCase();
+      const hint = (branch === 'main' && msg.includes('main'))
+        ? " Branch 'main' not found. Try setting branch to 'master' if the repo uses it."
+        : ` Branch '${branch}' not found in the repository.`;
+      throw new Error((e.message || 'Checkout failed').trim() + hint);
+    }
   }
   return dir;
 }
