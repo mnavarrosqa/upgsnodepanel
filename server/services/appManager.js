@@ -60,17 +60,28 @@ export function runBuild(app) {
   run(`nvm use ${nodeVersion} 2>/dev/null; ${cmd}`, { cwd: dir, withNvm: true });
 }
 
+const START_SCRIPT_NAME = '.upgs-start.sh';
+
 export function startApp(app) {
   const dir = appDir(app);
   if (!fs.existsSync(dir)) throw new Error('App directory not found.');
   const name = pm2Name(app);
   const startCmd = app.start_cmd || 'npm start';
   const nodeVersion = app.node_version || '20';
-  const script = `export NVM_DIR="${NVM_DIR}" && . "$NVM_DIR/nvm.sh" && nvm use ${nodeVersion} 2>/dev/null; cd "${dir}" && export PORT=${app.port} && ${startCmd}`;
+  const scriptPath = path.join(dir, START_SCRIPT_NAME);
+  const scriptBody = [
+    `export NVM_DIR="${NVM_DIR}"`,
+    `[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"`,
+    `nvm use ${nodeVersion} 2>/dev/null || true`,
+    `cd "${dir}"`,
+    `export PORT=${app.port}`,
+    startCmd,
+  ].join('\n');
+  fs.writeFileSync(scriptPath, scriptBody, 'utf8');
   try {
     run(`${PM2_BIN} describe ${name}`, { env: pm2Env() });
   } catch (_) {
-    run(`${PM2_BIN} start bash --name ${name} -- -c ${JSON.stringify(script)}`, {
+    run(`${PM2_BIN} start /usr/bin/bash --name ${name} -- "${scriptPath}"`, {
       env: pm2Env({ PORT: String(app.port) }),
     });
     return;
