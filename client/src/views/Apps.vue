@@ -119,8 +119,20 @@
               <td>{{ app.ssl_enabled ? 'Yes' : 'No' }}</td>
               <td><span class="badge" :class="app.status === 'running' ? 'badge-success' : 'badge-muted'">{{ app.status }}</span></td>
               <td>
-                <div class="action-btns">
-                  <router-link :to="`/apps/${app.id}`" class="btn">Open</router-link>
+                <div class="list-actions">
+                  <router-link :to="`/apps/${app.id}`" class="btn btn-sm">Open</router-link>
+                  <button type="button" class="btn btn-sm" title="Start" :disabled="app.status === 'running' || busyId === app.id" @click="doStart(app)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                  </button>
+                  <button type="button" class="btn btn-sm" title="Stop" :disabled="app.status !== 'running' || busyId === app.id" @click="doStop(app)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                  </button>
+                  <button type="button" class="btn btn-sm" title="Restart" :disabled="busyId === app.id" @click="doRestart(app)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+                  </button>
+                  <button type="button" class="btn btn-sm btn-danger" title="Delete" :disabled="busyId === app.id" @click="confirmDelete(app)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                  </button>
                 </div>
               </td>
             </tr>
@@ -128,6 +140,25 @@
         </table>
       </div>
       <p v-if="apps.length === 0" style="margin:0; color:var(--text-muted);">No apps. Add one above.</p>
+    </div>
+    <div v-if="showDeleteModal && appToDelete" class="modal-overlay" @click.self="closeDeleteModal">
+      <div class="confirm-dialog confirm-dialog--danger">
+        <div class="confirm-dialog__icon" aria-hidden="true">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+        </div>
+        <h3 class="confirm-dialog__title">Delete app</h3>
+        <p class="confirm-dialog__message">Permanently delete <strong>{{ appToDelete.name }}</strong>? This cannot be undone.</p>
+        <ul class="confirm-dialog__list">
+          <li>Stop and remove from PM2</li>
+          <li>Remove nginx config (if any)</li>
+          <li>Remove app record and delete the app folder on disk</li>
+        </ul>
+        <p v-if="deleteError" class="confirm-dialog__error">{{ deleteError }}</p>
+        <div class="confirm-dialog__actions">
+          <button type="button" class="btn" @click="closeDeleteModal" :disabled="deleting">Cancel</button>
+          <button type="button" class="btn btn-danger" @click="doDelete" :disabled="deleting">{{ deleting ? 'Deleting…' : 'Delete permanently' }}</button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -160,6 +191,11 @@ const form = ref({
 });
 
 const loadError = ref('');
+const busyId = ref(null);
+const showDeleteModal = ref(false);
+const appToDelete = ref(null);
+const deleting = ref(false);
+const deleteError = ref('');
 
 async function load() {
   loadError.value = '';
@@ -187,6 +223,67 @@ function closeForm() {
   domainCheckStatus.value = '';
   domainCheckMessage.value = '';
   branchDetected.value = '';
+}
+
+async function doStart(app) {
+  if (busyId.value) return;
+  busyId.value = app.id;
+  try {
+    await api.apps.start(app.id);
+    await load();
+  } finally {
+    busyId.value = null;
+  }
+}
+
+async function doStop(app) {
+  if (busyId.value) return;
+  busyId.value = app.id;
+  try {
+    await api.apps.stop(app.id);
+    await load();
+  } finally {
+    busyId.value = null;
+  }
+}
+
+async function doRestart(app) {
+  if (busyId.value) return;
+  busyId.value = app.id;
+  try {
+    await api.apps.restart(app.id);
+    await load();
+  } finally {
+    busyId.value = null;
+  }
+}
+
+function closeDeleteModal() {
+  if (deleting.value) return;
+  showDeleteModal.value = false;
+  appToDelete.value = null;
+  deleteError.value = '';
+}
+
+function confirmDelete(app) {
+  deleteError.value = '';
+  appToDelete.value = app;
+  showDeleteModal.value = true;
+}
+
+async function doDelete() {
+  if (!appToDelete.value) return;
+  deleteError.value = '';
+  deleting.value = true;
+  try {
+    await api.apps.remove(appToDelete.value.id);
+    closeDeleteModal();
+    await load();
+  } catch (e) {
+    deleteError.value = e.message || 'Delete failed';
+  } finally {
+    deleting.value = false;
+  }
 }
 
 async function checkDomain() {
@@ -344,5 +441,82 @@ function closeCreationOverlay() {
 }
 .domain-check--error {
   color: var(--danger);
+}
+.list-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+.list-actions .btn-sm {
+  padding: 0.35rem 0.5rem;
+  min-width: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 1rem;
+}
+.confirm-dialog {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  max-width: 420px;
+  width: 100%;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+}
+.confirm-dialog--danger {
+  border-color: var(--danger);
+}
+.confirm-dialog__icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--danger);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+.confirm-dialog__title {
+  margin: 0 0 0.5rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+.confirm-dialog__message {
+  margin: 0 0 1rem;
+  font-size: 0.9375rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.confirm-dialog__message strong {
+  color: var(--text);
+}
+.confirm-dialog__list {
+  margin: 0 0 1.25rem;
+  padding-left: 1.25rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+.confirm-dialog__error {
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+  color: var(--danger);
+}
+.confirm-dialog__actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
 }
 </style>
