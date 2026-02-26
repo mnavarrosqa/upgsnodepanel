@@ -54,7 +54,7 @@ export function initDb() {
 }
 
 const APP_PORT_MIN = Number(process.env.APP_PORT_MIN) || 3001;
-const APP_PORT_MAX = Number(process.env.APP_PORT_MAX) || 65535;
+const APP_PORT_MAX = Number(process.env.APP_PORT_MAX) || 3100;
 const PANEL_PORT = Number(process.env.PANEL_PORT) || 3000;
 
 /**

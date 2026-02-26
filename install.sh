@@ -153,6 +153,12 @@ if [ ! -f .env ]; then
   sed -i "s/SESSION_SECRET=.*/SESSION_SECRET=$SESSION_SECRET/" .env 2>/dev/null || true
 fi
 sed -i "s/PANEL_PORT=.*/PANEL_PORT=$PANEL_PORT/" .env 2>/dev/null || true
+APP_PORT_MIN="${APP_PORT_MIN:-3001}"
+APP_PORT_MAX="${APP_PORT_MAX:-3100}"
+sed -i "s/^APP_PORT_MIN=.*/APP_PORT_MIN=$APP_PORT_MIN/" .env 2>/dev/null || true
+sed -i "s/^APP_PORT_MAX=.*/APP_PORT_MAX=$APP_PORT_MAX/" .env 2>/dev/null || true
+if ! grep -q '^APP_PORT_MIN=' .env 2>/dev/null; then echo "APP_PORT_MIN=$APP_PORT_MIN" >> .env; fi
+if ! grep -q '^APP_PORT_MAX=' .env 2>/dev/null; then echo "APP_PORT_MAX=$APP_PORT_MAX" >> .env; fi
 sed -i "s|APPS_BASE_PATH=.*|APPS_BASE_PATH=$APPS_BASE_PATH|" .env 2>/dev/null || true
 sed -i "s|NGINX_APPS_CONF_DIR=.*|NGINX_APPS_CONF_DIR=$NGINX_APPS_CONF_DIR|" .env 2>/dev/null || true
 sed -i "s|NVM_DIR=.*|NVM_DIR=$NVM_DIR|" .env 2>/dev/null || true
@@ -196,11 +202,12 @@ else
   echo "[!] nginx config test failed. Fix with: nginx -t"
 fi
 
-echo "[*] Opening firewall ports (80, 443, 22)..."
+echo "[*] Opening firewall ports (22, 80, 443, app range ${APP_PORT_MIN}-${APP_PORT_MAX})..."
 if command -v ufw >/dev/null 2>&1; then
   ufw allow 22/tcp comment 'SSH' 2>/dev/null || true
   ufw allow 80/tcp comment 'HTTP panel' 2>/dev/null || true
   ufw allow 443/tcp comment 'HTTPS' 2>/dev/null || true
+  ufw allow "${APP_PORT_MIN}:${APP_PORT_MAX}/tcp" comment 'Node panel app ports' 2>/dev/null || true
   if ufw status 2>/dev/null | grep -q "Status: active"; then
     ufw reload 2>/dev/null || true
   fi
