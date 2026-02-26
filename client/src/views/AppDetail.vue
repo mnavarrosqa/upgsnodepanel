@@ -27,9 +27,11 @@
       <div class="card">
         <h3 style="margin:0 0 0.75rem; font-size:1rem;">Access</h3>
         <p v-if="app.domain" style="margin:0 0 0.25rem;">
-          <a :href="app.ssl_enabled ? `https://${app.domain}` : `http://${app.domain}`" target="_blank" rel="noopener">
-            {{ app.ssl_enabled ? 'https' : 'http' }}://{{ app.domain }}
+          <a :href="(app.ssl_active || app.ssl_enabled) ? `https://${app.domain}` : `http://${app.domain}`" target="_blank" rel="noopener">
+            {{ (app.ssl_active || app.ssl_enabled) ? 'https' : 'http' }}://{{ app.domain }}
           </a>
+          <span v-if="app.ssl_active" class="badge badge-success" style="margin-left:0.5rem;">SSL ✓</span>
+          <span v-else-if="app.ssl_enabled" class="badge badge-warn" style="margin-left:0.5rem;">SSL pending</span>
         </p>
         <p v-if="serverIp" style="margin:0; font-size:0.875rem; color:var(--text-muted);">
           Or by IP: <a :href="`http://${serverIp}:${app.port}`" target="_blank" rel="noopener">{{ serverIp }}:{{ app.port }}</a>

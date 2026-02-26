@@ -116,7 +116,11 @@
               <td><router-link :to="`/apps/${app.id}`">{{ app.name }}</router-link></td>
               <td>{{ app.domain || '—' }}</td>
               <td>{{ app.port }}</td>
-              <td>{{ app.ssl_enabled ? 'Yes' : 'No' }}</td>
+              <td>
+                <span v-if="app.ssl_active" class="badge badge-success" title="SSL active">SSL ✓</span>
+                <span v-else-if="app.ssl_enabled" class="badge badge-warn" title="Certificate pending">SSL …</span>
+                <span v-else class="ssl-off">—</span>
+              </td>
               <td><span class="badge" :class="app.status === 'running' ? 'badge-success' : 'badge-muted'">{{ app.status }}</span></td>
               <td>
                 <div class="list-actions">
@@ -441,6 +445,9 @@ function closeCreationOverlay() {
 }
 .domain-check--error {
   color: var(--danger);
+}
+.ssl-off {
+  color: var(--text-muted);
 }
 .list-actions {
   display: flex;

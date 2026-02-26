@@ -202,6 +202,17 @@ else
   echo "[!] nginx config test failed. Fix with: nginx -t"
 fi
 
+echo "[*] Installing certbot for automatic SSL (if not present)..."
+if ! command -v certbot >/dev/null 2>&1; then
+  apt-get update -qq 2>/dev/null || true
+  apt-get install -y certbot python3-certbot-nginx 2>/dev/null || true
+fi
+if command -v certbot >/dev/null 2>&1; then
+  echo "[*] Certbot installed. Set LETSENCRYPT_EMAIL in .env for cert expiry notices (optional)."
+else
+  echo "[!] Certbot not installed. Install it for automatic SSL: apt install certbot python3-certbot-nginx"
+fi
+
 echo "[*] Opening firewall ports (22, 80, 443, app range ${APP_PORT_MIN}-${APP_PORT_MAX})..."
 if command -v ufw >/dev/null 2>&1; then
   ufw allow 22/tcp comment 'SSH' 2>/dev/null || true

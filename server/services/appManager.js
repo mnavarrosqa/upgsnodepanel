@@ -1,7 +1,7 @@
 import path from 'path';
 import fs from 'fs';
 import { run, runPm2, runGit } from '../lib/exec.js';
-import { writeAppConfig, removeAppConfig, reloadNginx } from './nginx.js';
+import { writeAppConfig, removeAppConfig, reloadNginx, certsExist, obtainCert } from './nginx.js';
 
 const APPS_BASE = process.env.APPS_BASE_PATH || '/var/www/upgs-node-apps';
 const NVM_DIR = process.env.NVM_DIR || '/root/.nvm';
@@ -173,6 +173,22 @@ export function getLogs(app, lines = 100) {
 }
 
 export function setupNginxAndReload(app) {
+  const domain = app.domain && String(app.domain).trim();
+  if (!domain) {
+    writeAppConfig(app);
+    reloadNginx();
+    return;
+  }
+  // Write HTTP-only vhost first so the domain is in nginx (required for certbot --nginx)
+  writeAppConfig(app, true);
+  reloadNginx();
+  if (app.ssl_enabled && !certsExist(domain)) {
+    try {
+      obtainCert(domain);
+    } catch (e) {
+      console.warn('Could not obtain SSL cert for', domain, e.message);
+    }
+  }
   writeAppConfig(app);
   reloadNginx();
 }

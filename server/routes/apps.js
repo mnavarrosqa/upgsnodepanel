@@ -2,15 +2,20 @@ import { Router } from 'express';
 import fs from 'fs';
 import * as db from '../db.js';
 import * as appManager from '../services/appManager.js';
+import * as nginx from '../services/nginx.js';
 import { validateAppInput } from '../lib/validate.js';
 
 export const appsRouter = Router();
 
 function appToJson(row) {
   if (!row) return null;
+  const domain = row.domain && String(row.domain).trim();
+  const sslEnabled = Boolean(row.ssl_enabled);
+  const sslActive = sslEnabled && domain && nginx.certsExist(domain);
   return {
     ...row,
-    ssl_enabled: Boolean(row.ssl_enabled),
+    ssl_enabled: sslEnabled,
+    ssl_active: sslActive,
     status: appManager.getPm2Status(row),
   };
 }
