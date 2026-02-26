@@ -58,6 +58,11 @@
       </form>
       <p v-if="createError" style="margin-top:0.5rem; color:var(--danger);">{{ createError }}</p>
     </div>
+    <div v-if="creating" class="card creation-progress">
+      <h3 style="margin:0 0 0.5rem; font-size:1rem;">Creating app…</h3>
+      <p style="margin:0 0 0.5rem; font-size:0.875rem; color:var(--text-muted);">{{ creationStep }}</p>
+      <pre class="creation-logs">{{ creationLogs }}</pre>
+    </div>
     <p v-if="loadError" style="color:var(--danger); margin-bottom:1rem;">{{ loadError }}</p>
     <div class="card">
       <div class="table-wrap">
@@ -101,6 +106,8 @@ const apps = ref([]);
 const showForm = ref(false);
 const creating = ref(false);
 const createError = ref('');
+const creationStep = ref('');
+const creationLogs = ref('');
 const nodeVersions = ref([]);
 const form = ref({
   name: '',
@@ -142,13 +149,45 @@ onMounted(() => {
   loadNodeVersions();
 });
 
+const stepLabels = {
+  clone: 'Cloning repository…',
+  clone_done: 'Repository ready',
+  install: 'Running install…',
+  install_done: 'Install complete',
+  build: 'Running build…',
+  build_done: 'Build complete',
+  nginx: 'Configuring nginx…',
+  nginx_done: 'Nginx configured',
+  start: 'Starting app…',
+  start_done: 'App started',
+};
+
+function appendLogs(logs, stdout, stderr) {
+  if (stdout && stdout.trim()) logs.push(stdout.trim());
+  if (stderr && stderr.trim()) logs.push(stderr.trim());
+}
+
 async function create() {
   createError.value = '';
+  creationStep.value = 'Starting…';
+  creationLogs.value = '';
   creating.value = true;
   try {
-    await api.apps.create(form.value);
+    await api.apps.createWithProgress(form.value, (ev) => {
+      if (ev.step) {
+        creationStep.value = ev.message || stepLabels[ev.step] || ev.step;
+        if (ev.stdout || ev.stderr) {
+          const lines = creationLogs.value ? creationLogs.value.split('\n') : [];
+          appendLogs(lines, ev.stdout, ev.stderr);
+          creationLogs.value = lines.join('\n');
+        }
+      }
+      if (ev.error) createError.value = ev.error;
+    });
     showForm.value = false;
     form.value = { name: '', repo_url: '', branch: 'main', node_version: nodeVersions.value[0] || '20', install_cmd: 'npm install', build_cmd: '', start_cmd: 'npm start', domain: '', ssl_enabled: false };
+    creationStep.value = '';
+    creationLogs.value = '';
     load();
   } catch (e) {
     createError.value = e.message || 'Create failed';
@@ -157,3 +196,20 @@ async function create() {
   }
 }
 </script>
+
+<style scoped>
+.creation-progress {
+  margin-top: 1rem;
+}
+.creation-logs {
+  margin: 0;
+  padding: 0.75rem;
+  background: var(--bg);
+  border-radius: var(--radius);
+  font-size: 0.8rem;
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+</style>

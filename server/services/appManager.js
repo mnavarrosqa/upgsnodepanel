@@ -25,6 +25,10 @@ function appDir(app) {
   return path.join(APPS_BASE, safeName);
 }
 
+/**
+ * Clones or updates the app repo. Returns { dir, actualBranch }.
+ * If branch is 'main' and the repo only has 'master', checks out 'master' and returns actualBranch: 'master'.
+ */
 export function cloneApp(app) {
   const dir = appDir(app);
   const branch = app.branch || 'main';
@@ -35,20 +39,31 @@ export function cloneApp(app) {
     runGit(['fetch'], { cwd: dir });
     runGit(['checkout', branch], { cwd: dir });
     runGit(['pull'], { cwd: dir });
-  } else {
-    // Clone without -b so we get the repo's default branch (main or master)
-    runGit(['clone', app.repo_url, dir], {});
-    try {
-      runGit(['checkout', branch], { cwd: dir });
-    } catch (e) {
-      const msg = (e.message || '').toLowerCase();
-      const hint = (branch === 'main' && msg.includes('main'))
-        ? " Branch 'main' not found. Try setting branch to 'master' if the repo uses it."
-        : ` Branch '${branch}' not found in the repository.`;
+    return { dir, actualBranch: branch };
+  }
+  // Clone without -b so we get the repo's default branch (main or master)
+  runGit(['clone', app.repo_url, dir], {});
+  let actualBranch = branch;
+  try {
+    runGit(['checkout', branch], { cwd: dir });
+  } catch (e) {
+    if (branch === 'main') {
+      try {
+        runGit(['checkout', 'master'], { cwd: dir });
+        actualBranch = 'master';
+      } catch (_) {
+        const msg = (e.message || '').toLowerCase();
+        const hint = msg.includes('main')
+          ? " Branch 'main' not found. Try setting branch to 'master' if the repo uses it."
+          : ` Branch '${branch}' not found in the repository.`;
+        throw new Error((e.message || 'Checkout failed').trim() + hint);
+      }
+    } else {
+      const hint = ` Branch '${branch}' not found in the repository.`;
       throw new Error((e.message || 'Checkout failed').trim() + hint);
     }
   }
-  return dir;
+  return { dir, actualBranch };
 }
 
 export function runInstall(app) {
@@ -56,16 +71,18 @@ export function runInstall(app) {
   if (!fs.existsSync(dir)) throw new Error('App directory not found. Clone first.');
   const cmd = app.install_cmd || 'npm install';
   const nodeVersion = app.node_version || '20';
-  run(`nvm use ${nodeVersion} 2>/dev/null; ${cmd}`, { cwd: dir, withNvm: true });
+  const result = run(`nvm use ${nodeVersion} 2>/dev/null; ${cmd}`, { cwd: dir, withNvm: true });
+  return result;
 }
 
 export function runBuild(app) {
   const dir = appDir(app);
   if (!fs.existsSync(dir)) throw new Error('App directory not found.');
   const cmd = app.build_cmd;
-  if (!cmd) return;
+  if (!cmd) return { stdout: '', stderr: '' };
   const nodeVersion = app.node_version || '20';
-  run(`nvm use ${nodeVersion} 2>/dev/null; ${cmd}`, { cwd: dir, withNvm: true });
+  const result = run(`nvm use ${nodeVersion} 2>/dev/null; ${cmd}`, { cwd: dir, withNvm: true });
+  return result;
 }
 
 const START_SCRIPT_NAME = '.upgs-start.sh';

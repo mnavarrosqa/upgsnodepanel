@@ -34,7 +34,12 @@ appsRouter.get('/:id', (req, res, next) => {
   }
 });
 
+function writeStreamLine(res, obj) {
+  res.write(JSON.stringify(obj) + '\n');
+}
+
 appsRouter.post('/', async (req, res, next) => {
+  const stream = req.query.stream === '1' || req.get('Accept') === 'application/x-ndjson';
   try {
     const data = req.body || {};
     let createData;
@@ -55,14 +60,48 @@ appsRouter.post('/', async (req, res, next) => {
       return res.status(400).json({ error: e.message || 'Validation failed' });
     }
     const app = db.createApp(createData);
+    const send = (obj) => stream && writeStreamLine(res, obj);
+    if (stream) {
+      res.setHeader('Content-Type', 'application/x-ndjson');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.flushHeaders && res.flushHeaders();
+    }
     try {
-      appManager.cloneApp(app);
-      appManager.runInstall(app);
-      if (app.build_cmd) appManager.runBuild(app);
-      if (app.domain) {
-        appManager.setupNginxAndReload(app);
+      send({ step: 'clone', message: 'Cloning repository…' });
+      const { actualBranch } = appManager.cloneApp(app);
+      if (actualBranch && actualBranch !== app.branch) {
+        db.updateApp(app.id, { branch: actualBranch });
+        app.branch = actualBranch;
       }
+      send({ step: 'clone_done', message: 'Repository ready' });
+
+      send({ step: 'install', message: 'Running install…' });
+      const installOut = appManager.runInstall(app);
+      send({ step: 'install_done', stdout: installOut.stdout || '', stderr: installOut.stderr || '' });
+
+      if (app.build_cmd) {
+        send({ step: 'build', message: 'Running build…' });
+        const buildOut = appManager.runBuild(app);
+        send({ step: 'build_done', stdout: buildOut.stdout || '', stderr: buildOut.stderr || '' });
+      }
+
+      if (app.domain) {
+        send({ step: 'nginx', message: 'Configuring nginx…' });
+        appManager.setupNginxAndReload(app);
+        send({ step: 'nginx_done' });
+      }
+
+      send({ step: 'start', message: 'Starting app…' });
       appManager.startApp(app);
+      send({ step: 'start_done' });
+
+      const finalApp = appToJson(db.getApp(app.id));
+      if (stream) {
+        writeStreamLine(res, { done: true, app: finalApp });
+        res.end();
+      } else {
+        res.status(201).json(finalApp);
+      }
     } catch (e) {
       console.error('App setup error:', e);
       db.deleteApp(app.id);
@@ -74,11 +113,18 @@ appsRouter.post('/', async (req, res, next) => {
         const dir = appManager.appDir(app);
         if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true });
       } catch (_) {}
-      return res.status(500).json({ error: e.message || 'Setup failed' });
+      const errMsg = e.message || 'Setup failed';
+      if (stream) {
+        writeStreamLine(res, { error: errMsg });
+        res.end();
+      } else {
+        return res.status(500).json({ error: errMsg });
+      }
     }
-    res.status(201).json(appToJson(db.getApp(app.id)));
   } catch (e) {
-    next(e);
+    if (!stream) return next(e);
+    writeStreamLine(res, { error: e.message || 'Request failed' });
+    res.end();
   }
 });
 

@@ -3,6 +3,7 @@ import path from 'path';
 import { run } from '../lib/exec.js';
 
 const NGINX_APPS_DIR = process.env.NGINX_APPS_CONF_DIR || '/etc/nginx/conf.d/upgs-node-apps';
+const NGINX_BIN = process.env.NGINX_BIN || '/usr/sbin/nginx';
 const LETSENCRYPT_BASE = '/etc/letsencrypt/live';
 
 function ensureDir() {
@@ -88,8 +89,8 @@ export function removeAppConfig(id) {
 
 export function reloadNginx() {
   try {
-    run('nginx -t', {});
-    run('nginx -s reload', {});
+    run(`${NGINX_BIN} -t`, {});
+    run(`${NGINX_BIN} -s reload`, {});
   } catch (e) {
     console.warn('Nginx reload failed:', e.message);
     throw e;
