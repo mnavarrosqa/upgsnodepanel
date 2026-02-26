@@ -11,6 +11,11 @@ import { nodeRouter } from './routes/node.js';
 import { appsRouter } from './routes/apps.js';
 import { systemRouter } from './routes/system.js';
 
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err);
+  process.exit(1);
+});
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PANEL_PORT) || 3000;
 const isProduction = process.env.NODE_ENV === 'production';
@@ -32,7 +37,13 @@ const sessionConfig = {
   },
 };
 if (isProduction) {
-  sessionConfig.store = new SqliteSessionStore();
+  try {
+    const store = new SqliteSessionStore();
+    if (typeof store.on !== 'function') store.on = () => store;
+    sessionConfig.store = store;
+  } catch (err) {
+    console.error('SqliteSessionStore failed, using default session store:', err.message);
+  }
 }
 app.use(session(sessionConfig));
 
