@@ -1,6 +1,7 @@
 import { execSync, spawnSync } from 'child_process';
 
 const NVM_DIR = process.env.NVM_DIR || '/root/.nvm';
+const PM2_BIN_PATH = process.env.PM2_BIN || '/usr/local/bin/pm2';
 
 /**
  * Run a shell command. Optionally wrap in bash with nvm sourced.
@@ -28,6 +29,30 @@ export function run(command, options = {}) {
     maxBuffer: 10 * 1024 * 1024,
   });
   return { stdout: result || '', stderr: '' };
+}
+
+/**
+ * Run PM2 with argv (no shell). Uses fixed PM2 binary path and the given env
+ * so the panel always talks to the same daemon as `pm2 list` in the shell.
+ * @param {string[]} args - e.g. ['start', '/usr/bin/bash', '--name', 'upgs-app-1', '--', '/path/to/script.sh']
+ * @param {{ env: Record<string, string> }} options - must include HOME and PM2_HOME (e.g. /root, /root/.pm2)
+ * @returns {{ stdout: string, stderr: string }}
+ */
+export function runPm2(args, options = {}) {
+  const { env } = options;
+  const result = spawnSync(PM2_BIN_PATH, args, {
+    encoding: 'utf-8',
+    env: env || process.env,
+    maxBuffer: 10 * 1024 * 1024,
+  });
+  if (result.status !== 0) {
+    const err = new Error(result.stderr || result.stdout || 'PM2 command failed');
+    err.stdout = result.stdout;
+    err.stderr = result.stderr;
+    err.status = result.status;
+    throw err;
+  }
+  return { stdout: result.stdout || '', stderr: result.stderr || '' };
 }
 
 /**

@@ -1,19 +1,17 @@
 import path from 'path';
 import fs from 'fs';
-import { run, runGit } from '../lib/exec.js';
+import { run, runPm2, runGit } from '../lib/exec.js';
 import { writeAppConfig, removeAppConfig, reloadNginx } from './nginx.js';
 
 const APPS_BASE = process.env.APPS_BASE_PATH || '/var/www/upgs-node-apps';
 const NVM_DIR = process.env.NVM_DIR || '/root/.nvm';
-const PM2_HOME = process.env.PM2_HOME || '/root/.pm2';
-const PM2_BIN = process.env.PM2_BIN || 'pm2';
 
-/** Env for pm2 so it uses the same daemon as the shell (panel and `pm2 list` see the same apps). */
+/** Env for PM2: force HOME and PM2_HOME so panel and shell use the same daemon. */
 function pm2Env(extra = {}) {
   return {
     ...process.env,
-    HOME: process.env.HOME || '/root',
-    PM2_HOME,
+    HOME: '/root',
+    PM2_HOME: '/root/.pm2',
     ...extra,
   };
 }
@@ -79,31 +77,31 @@ export function startApp(app) {
   ].join('\n');
   fs.writeFileSync(scriptPath, scriptBody, 'utf8');
   try {
-    run(`${PM2_BIN} describe ${name}`, { env: pm2Env() });
+    runPm2(['describe', name], { env: pm2Env() });
   } catch (_) {
-    run(`${PM2_BIN} start /usr/bin/bash --name ${name} -- "${scriptPath}"`, {
+    runPm2(['start', '/usr/bin/bash', '--name', name, '--', scriptPath], {
       env: pm2Env({ PORT: String(app.port) }),
     });
     return;
   }
-  run(`${PM2_BIN} start ${name}`, { env: pm2Env() });
+  runPm2(['start', name], { env: pm2Env() });
 }
 
 export function stopApp(app) {
   const name = pm2Name(app);
   try {
-    run(`${PM2_BIN} stop ${name}`, { env: pm2Env() });
+    runPm2(['stop', name], { env: pm2Env() });
   } catch (e) {
-    if (!e.message.includes('not found')) throw e;
+    if (!e.message?.includes('not found')) throw e;
   }
 }
 
 export function restartApp(app) {
   const name = pm2Name(app);
   try {
-    run(`${PM2_BIN} restart ${name}`, { env: pm2Env() });
+    runPm2(['restart', name], { env: pm2Env() });
   } catch (e) {
-    if (e.message.includes('not found')) startApp(app);
+    if (e.message?.includes('not found')) startApp(app);
     else throw e;
   }
 }
@@ -111,14 +109,14 @@ export function restartApp(app) {
 export function deleteFromPm2(app) {
   const name = pm2Name(app);
   try {
-    run(`${PM2_BIN} delete ${name}`, { env: pm2Env() });
+    runPm2(['delete', name], { env: pm2Env() });
   } catch (_) {}
 }
 
 export function getPm2Status(app) {
   const name = pm2Name(app);
   try {
-    const { stdout } = run(`${PM2_BIN} jlist`, { env: pm2Env() });
+    const { stdout } = runPm2(['jlist'], { env: pm2Env() });
     const list = JSON.parse(stdout);
     const proc = list.find((p) => p.name === name);
     if (!proc) return 'stopped';
@@ -131,7 +129,7 @@ export function getPm2Status(app) {
 export function getLogs(app, lines = 100) {
   const name = pm2Name(app);
   try {
-    const { stdout } = run(`${PM2_BIN} logs ${name} --lines ${lines} --nostream`, { env: pm2Env() });
+    const { stdout } = runPm2(['logs', name, '--lines', String(lines), '--nostream'], { env: pm2Env() });
     return stdout;
   } catch (e) {
     return e.stdout || e.message || 'No logs';
