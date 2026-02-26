@@ -22,22 +22,21 @@ const router = createRouter({
 });
 
 router.beforeEach(async (to, from, next) => {
+  const data = await api.auth.me().catch(() => ({ user: null }));
+  const loggedIn = !!data.user;
   if (to.meta.public) {
-    try {
-      await api.auth.me();
+    if (loggedIn) {
       const redirectPath = to.query.redirect && to.query.redirect !== '/login' ? to.query.redirect : '/';
       next({ path: redirectPath, query: {} });
-    } catch {
+    } else {
       next();
     }
     return;
   }
-  try {
-    await api.auth.me();
+  if (to.meta.requiresAuth && !loggedIn) {
+    next({ name: 'Login', query: { redirect: to.fullPath } });
+  } else {
     next();
-  } catch {
-    if (to.meta.requiresAuth) next({ name: 'Login', query: { redirect: to.fullPath } });
-    else next();
   }
 });
 
