@@ -1,4 +1,5 @@
 import { run } from '../lib/exec.js';
+import { spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
@@ -30,12 +31,27 @@ export function listVersions() {
   return [];
 }
 
+/**
+ * Install a Node version via nvm. Returns { versions, stdout, stderr }.
+ */
 export function installVersion(version) {
   const v = String(version).trim();
-  if (!v || !/^[\d.]+\d$/.test(v) && v !== 'lts' && v !== 'node') {
+  if (!v || (!/^[\d.]+\d$/.test(v) && v !== 'lts' && v !== 'node')) {
     throw new Error('Invalid version format');
   }
   const cmd = v === 'lts' ? 'nvm install --lts' : `nvm install ${v}`;
-  run(`bash -c 'export NVM_DIR="${NVM_DIR}" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && ${cmd}'`, { withNvm: false });
-  return listVersions();
+  const script = `export NVM_DIR="${NVM_DIR}" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && ${cmd}`;
+  const result = spawnSync('bash', ['-c', script], {
+    encoding: 'utf-8',
+    maxBuffer: 10 * 1024 * 1024,
+  });
+  const stdout = (result.stdout || '').trim();
+  const stderr = (result.stderr || '').trim();
+  if (result.status !== 0) {
+    const err = new Error(stderr || stdout || 'Install failed');
+    err.stdout = stdout;
+    err.stderr = stderr;
+    throw err;
+  }
+  return { versions: listVersions(), stdout, stderr };
 }

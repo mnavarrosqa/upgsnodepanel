@@ -37,6 +37,14 @@ export const api = {
   node: {
     versions: () => request('/api/node/versions'),
     installVersion: (version) => request('/api/node/versions', { method: 'POST', body: JSON.stringify({ version }) }),
+    installVersionWithLog(version) {
+      return fetch('/api/node/versions', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ version }),
+      }).then((r) => r.json().then((d) => ({ ok: r.ok, ...d })).catch(() => ({ ok: r.ok })));
+    },
   },
   apps: {
     list: () => request('/api/apps'),
@@ -110,6 +118,8 @@ export const api = {
     restart: (id) => request(`/api/apps/${id}/restart`, { method: 'POST' }),
     install: (id) => request(`/api/apps/${id}/install`, { method: 'POST' }),
     build: (id) => request(`/api/apps/${id}/build`, { method: 'POST' }),
+    pull: (id, body) => request(`/api/apps/${id}/pull`, { method: 'POST', body: JSON.stringify(body || {}) }),
+    redeploy: (id, body) => request(`/api/apps/${id}/redeploy`, { method: 'POST', body: JSON.stringify(body || {}) }),
     logs: (id, lines) => request(`/api/apps/${id}/logs?lines=${lines || 100}`),
     env: (id) => request(`/api/apps/${id}/env`),
     updateEnv: (id, env) => request(`/api/apps/${id}/env`, { method: 'PUT', body: JSON.stringify({ env }) }),
@@ -117,6 +127,10 @@ export const api = {
   system: {
     ip: () => request('/api/system/ip'),
     checkDomain: (domain) => request(`/api/system/check-domain?domain=${encodeURIComponent(domain)}`),
+    defaultBranch: (url) => request(`/api/system/default-branch?url=${encodeURIComponent(url)}`),
+  },
+};
+domain)}`),
     defaultBranch: (url) => request(`/api/system/default-branch?url=${encodeURIComponent(url)}`),
   },
 };

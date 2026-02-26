@@ -54,6 +54,12 @@
               <label>Domain</label>
               <input v-model="edit.domain" type="text" placeholder="app.example.com" />
             </div>
+            <div class="form-group">
+              <label>Branch</label>
+              <input v-model="edit.branch" type="text" placeholder="main or leave empty" />
+            </div>
+          </div>
+          <div class="form-row form-row--2">
             <div class="form-group form-group--checkbox">
               <label><input v-model="edit.ssl_enabled" type="checkbox" /> Enable SSL</label>
             </div>
@@ -82,6 +88,14 @@
           <button type="submit" class="btn btn-primary" :disabled="saving">Save</button>
         </fieldset>
       </form>
+      </section>
+      <section class="card">
+        <h2 class="card__title">Update from repo</h2>
+        <p class="card__muted">Pull latest from the repo. Save first if you changed the branch above. Redeploy also runs install, build, and restart.</p>
+        <div class="action-btns">
+          <button type="button" class="btn" @click="doPull" :disabled="busyPull || busyRedeploy || saving">{{ busyPull ? 'Pulling…' : 'Update from repo' }}</button>
+          <button type="button" class="btn btn-primary" @click="doRedeploy" :disabled="busyPull || busyRedeploy || saving">{{ busyRedeploy ? 'Redeploying…' : 'Redeploy' }}</button>
+        </div>
       </section>
       <section class="card">
         <h2 class="card__title">Run commands</h2>
@@ -142,7 +156,7 @@ import { api } from '../api';
 const route = useRoute();
 const router = useRouter();
 const app = ref(null);
-const edit = ref({ domain: '', ssl_enabled: false, node_version: '', install_cmd: '', build_cmd: '', start_cmd: '' });
+const edit = ref({ domain: '', ssl_enabled: false, branch: '', node_version: '', install_cmd: '', build_cmd: '', start_cmd: '' });
 const nodeVersions = ref([]);
 const nodeVersionOptions = computed(() => {
   const list = [...nodeVersions.value];
@@ -164,6 +178,8 @@ const actionFeedback = ref({ type: 'success', message: '' });
 const feedbackTimer = ref(null);
 const busyInstall = ref(false);
 const busyBuild = ref(false);
+const busyPull = ref(false);
+const busyRedeploy = ref(false);
 const busy = computed(() => busyInstall.value || busyBuild.value);
 
 function setFeedback(type, message) {
@@ -222,6 +238,7 @@ async function load() {
     edit.value = {
       domain: appRes.domain || '',
       ssl_enabled: appRes.ssl_enabled || false,
+      branch: appRes.branch ?? '',
       node_version: appRes.node_version || (nodeVersions.value[0] ?? ''),
       install_cmd: appRes.install_cmd || '',
       build_cmd: appRes.build_cmd || '',
@@ -294,6 +311,7 @@ async function save() {
     edit.value = {
       domain: updated.domain || '',
       ssl_enabled: updated.ssl_enabled || false,
+      branch: updated.branch ?? '',
       node_version: updated.node_version || '',
       install_cmd: updated.install_cmd || '',
       build_cmd: updated.build_cmd || '',
@@ -328,6 +346,39 @@ async function runBuild() {
     setFeedback('error', e.message || 'Build failed.');
   } finally {
     busyBuild.value = false;
+  }
+}
+
+function pullBody() {
+  const b = (edit.value.branch || '').trim();
+  return { branch: b || undefined };
+}
+
+async function doPull() {
+  busyPull.value = true;
+  try {
+    const updated = await api.apps.pull(route.params.id, pullBody());
+    app.value = updated;
+    edit.value.branch = updated.branch ?? '';
+    setFeedback('success', 'Repo updated.');
+  } catch (e) {
+    setFeedback('error', e.message || 'Update failed.');
+  } finally {
+    busyPull.value = false;
+  }
+}
+
+async function doRedeploy() {
+  busyRedeploy.value = true;
+  try {
+    const updated = await api.apps.redeploy(route.params.id, pullBody());
+    app.value = updated;
+    edit.value.branch = updated.branch ?? '';
+    setFeedback('success', 'Redeployed: pull, install, build, restart done.');
+  } catch (e) {
+    setFeedback('error', e.message || 'Redeploy failed.');
+  } finally {
+    busyRedeploy.value = false;
   }
 }
 

@@ -236,6 +236,43 @@ appsRouter.post('/:id/build', (req, res, next) => {
   }
 });
 
+appsRouter.post('/:id/pull', (req, res, next) => {
+  try {
+    const app = db.getApp(req.params.id);
+    if (!app) return res.status(404).json({ error: 'App not found' });
+    const branch = req.body && req.body.branch !== undefined ? (req.body.branch === '' ? null : String(req.body.branch).trim()) : undefined;
+    const updated = branch !== undefined ? db.updateApp(app.id, { branch: branch || null }) : db.getApp(app.id);
+    const appToUse = { ...updated };
+    if (branch !== undefined) appToUse.branch = branch;
+    const { actualBranch } = appManager.cloneApp(appToUse);
+    if (actualBranch && actualBranch !== (updated.branch || '')) {
+      db.updateApp(app.id, { branch: actualBranch });
+    }
+    res.json(appToJson(db.getApp(app.id)));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+appsRouter.post('/:id/redeploy', (req, res, next) => {
+  try {
+    const app = db.getApp(req.params.id);
+    if (!app) return res.status(404).json({ error: 'App not found' });
+    const branch = req.body && req.body.branch !== undefined ? (req.body.branch === '' ? null : String(req.body.branch).trim()) : undefined;
+    let current = branch !== undefined ? db.updateApp(app.id, { branch: branch || null }) : app;
+    current = db.getApp(current.id);
+    const appToUse = { ...current };
+    if (branch !== undefined) appToUse.branch = branch;
+    appManager.cloneApp(appToUse);
+    const installOut = appManager.runInstall(current);
+    if (current.build_cmd) appManager.runBuild(current);
+    appManager.restartApp(current);
+    res.json(appToJson(db.getApp(current.id)));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 appsRouter.get('/:id/logs', (req, res, next) => {
   try {
     const app = db.getApp(req.params.id);

@@ -3,9 +3,24 @@
     <aside class="sidebar">
       <div class="sidebar-brand">UPGS NODE PANEL</div>
       <nav class="sidebar-nav">
-        <router-link to="/">Dashboard</router-link>
-        <router-link to="/node">Node versions</router-link>
-        <router-link to="/apps">Apps</router-link>
+        <router-link to="/" class="sidebar-nav__item">
+          <span class="sidebar-nav__icon" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          </span>
+          Dashboard
+        </router-link>
+        <router-link to="/node" class="sidebar-nav__item">
+          <span class="sidebar-nav__icon" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/></svg>
+          </span>
+          Node versions
+        </router-link>
+        <router-link to="/apps" class="sidebar-nav__item">
+          <span class="sidebar-nav__icon" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h.01M10 12h.01M14 12h.01M18 12h.01"/></svg>
+          </span>
+          Apps
+        </router-link>
       </nav>
       <div class="sidebar-footer">
         <span class="sidebar-user">{{ user }}</span>
@@ -40,6 +55,21 @@ async function logout() {
 </script>
 
 <style scoped>
+.sidebar-nav__item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.sidebar-nav__icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.85;
+}
+a.router-link-active .sidebar-nav__icon {
+  opacity: 1;
+}
 .sidebar-footer {
   margin-top: auto;
   padding: 1rem;
