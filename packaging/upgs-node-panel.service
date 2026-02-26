@@ -1,0 +1,16 @@
+[Unit]
+Description=UPGS Node Panel
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/upgs-node-panel
+EnvironmentFile=/opt/upgs-node-panel/.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/env node server/index.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

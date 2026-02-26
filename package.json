@@ -1,0 +1,28 @@
+{
+  "name": "upgs-node-panel",
+  "version": "1.0.0",
+  "description": "UPGS Node Panel - Manage and install Node apps on your VPS",
+  "type": "module",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node server/index.js",
+    "build": "cd client && npm run build",
+    "db:init": "node server/scripts/init-db.js",
+    "postinstall": "cd client && npm install"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.6.0",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "express-session": "^1.18.0"
+  },
+  "optionalDependencies": {
+    "node-linux-pam": "^0.2.1"
+  }
+}
