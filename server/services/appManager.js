@@ -5,6 +5,18 @@ import { writeAppConfig, removeAppConfig, reloadNginx } from './nginx.js';
 
 const APPS_BASE = process.env.APPS_BASE_PATH || '/var/www/upgs-node-apps';
 const NVM_DIR = process.env.NVM_DIR || '/root/.nvm';
+const PM2_HOME = process.env.PM2_HOME || '/root/.pm2';
+const PM2_BIN = process.env.PM2_BIN || 'pm2';
+
+/** Env for pm2 so it uses the same daemon as the shell (panel and `pm2 list` see the same apps). */
+function pm2Env(extra = {}) {
+  return {
+    ...process.env,
+    HOME: process.env.HOME || '/root',
+    PM2_HOME,
+    ...extra,
+  };
+}
 
 function pm2Name(app) {
   return `upgs-app-${app.id}`;
@@ -56,18 +68,20 @@ export function startApp(app) {
   const nodeVersion = app.node_version || '20';
   const script = `export NVM_DIR="${NVM_DIR}" && . "$NVM_DIR/nvm.sh" && nvm use ${nodeVersion} 2>/dev/null; cd "${dir}" && export PORT=${app.port} && ${startCmd}`;
   try {
-    run(`pm2 describe ${name}`, {});
+    run(`${PM2_BIN} describe ${name}`, { env: pm2Env() });
   } catch (_) {
-    run(`pm2 start bash --name ${name} -- -c ${JSON.stringify(script)}`, { env: { ...process.env, PORT: String(app.port) } });
+    run(`${PM2_BIN} start bash --name ${name} -- -c ${JSON.stringify(script)}`, {
+      env: pm2Env({ PORT: String(app.port) }),
+    });
     return;
   }
-  run(`pm2 start ${name}`, {});
+  run(`${PM2_BIN} start ${name}`, { env: pm2Env() });
 }
 
 export function stopApp(app) {
   const name = pm2Name(app);
   try {
-    run(`pm2 stop ${name}`, {});
+    run(`${PM2_BIN} stop ${name}`, { env: pm2Env() });
   } catch (e) {
     if (!e.message.includes('not found')) throw e;
   }
@@ -76,7 +90,7 @@ export function stopApp(app) {
 export function restartApp(app) {
   const name = pm2Name(app);
   try {
-    run(`pm2 restart ${name}`, {});
+    run(`${PM2_BIN} restart ${name}`, { env: pm2Env() });
   } catch (e) {
     if (e.message.includes('not found')) startApp(app);
     else throw e;
@@ -86,14 +100,14 @@ export function restartApp(app) {
 export function deleteFromPm2(app) {
   const name = pm2Name(app);
   try {
-    run(`pm2 delete ${name}`, {});
+    run(`${PM2_BIN} delete ${name}`, { env: pm2Env() });
   } catch (_) {}
 }
 
 export function getPm2Status(app) {
   const name = pm2Name(app);
   try {
-    const { stdout } = run(`pm2 jlist`, {});
+    const { stdout } = run(`${PM2_BIN} jlist`, { env: pm2Env() });
     const list = JSON.parse(stdout);
     const proc = list.find((p) => p.name === name);
     if (!proc) return 'stopped';
@@ -106,7 +120,7 @@ export function getPm2Status(app) {
 export function getLogs(app, lines = 100) {
   const name = pm2Name(app);
   try {
-    const { stdout } = run(`pm2 logs ${name} --lines ${lines} --nostream`, {});
+    const { stdout } = run(`${PM2_BIN} logs ${name} --lines ${lines} --nostream`, { env: pm2Env() });
     return stdout;
   } catch (e) {
     return e.stdout || e.message || 'No logs';
