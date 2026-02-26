@@ -130,7 +130,3 @@ export const api = {
     defaultBranch: (url) => request(`/api/system/default-branch?url=${encodeURIComponent(url)}`),
   },
 };
-domain)}`),
-    defaultBranch: (url) => request(`/api/system/default-branch?url=${encodeURIComponent(url)}`),
-  },
-};

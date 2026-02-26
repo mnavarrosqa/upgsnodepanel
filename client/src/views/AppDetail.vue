@@ -10,84 +10,88 @@
         <div class="app-detail-title">
           <router-link to="/apps" class="app-detail-back">← Apps</router-link>
           <h1 class="page-title">{{ app.name }}</h1>
+          <span class="status-pill" :class="app.status === 'running' ? 'status-pill--running' : 'status-pill--stopped'" :title="'Status: ' + app.status">
+            <span class="status-pill__dot"></span>
+            {{ app.status }}
+          </span>
         </div>
         <div class="app-detail-actions">
-        <button type="button" class="btn" @click="doStart" :disabled="app.status === 'running' || saving" title="Run">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-          Run
-        </button>
-        <button type="button" class="btn" @click="doStop" :disabled="app.status !== 'running' || saving" title="Pause">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-          Pause
-        </button>
-        <button type="button" class="btn" @click="doRestart" :disabled="saving" title="Restart">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
-          Restart
-        </button>
-        <button type="button" class="btn btn-danger" @click="confirmDelete" :disabled="saving" title="Delete">Delete</button>
+          <button type="button" class="btn" @click="doStart" :disabled="app.status === 'running' || saving" title="Run">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            Run
+          </button>
+          <button type="button" class="btn" @click="doStop" :disabled="app.status !== 'running' || saving" title="Pause">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+            Pause
+          </button>
+          <button type="button" class="btn" @click="doRestart" :disabled="saving" title="Restart">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+            Restart
+          </button>
+          <button type="button" class="btn btn-danger" @click="confirmDelete" :disabled="saving" title="Delete">Delete</button>
         </div>
       </header>
-      <section class="app-detail-grid app-detail-grid--top">
-        <div class="card">
-          <h2 class="card__title">Access</h2>
-          <p v-if="app.domain" class="card__line">
-            <a :href="(app.ssl_active || app.ssl_enabled) ? `https://${app.domain}` : `http://${app.domain}`" target="_blank" rel="noopener">
+
+      <section class="card card--access">
+        <h2 class="card__title">Access</h2>
+        <div class="access-list">
+          <div v-if="app.domain" class="access-row">
+            <span class="access-label">Domain</span>
+            <a :href="(app.ssl_active || app.ssl_enabled) ? `https://${app.domain}` : `http://${app.domain}`" target="_blank" rel="noopener" class="access-url">
               {{ (app.ssl_active || app.ssl_enabled) ? 'https' : 'http' }}://{{ app.domain }}
             </a>
             <span v-if="app.ssl_active" class="badge badge-success">SSL ✓</span>
             <span v-else-if="app.ssl_enabled" class="badge badge-warn">SSL pending</span>
-          </p>
-          <p v-if="serverIp" class="card__muted">Or by IP: <a :href="`http://${serverIp}:${app.port}`" target="_blank" rel="noopener">{{ serverIp }}:{{ app.port }}</a></p>
-          <p v-if="!app.domain && serverIp" class="card__muted">Set a domain in Edit to use a friendly URL.</p>
-        </div>
-        <div class="card">
-          <h2 class="card__title">Status</h2>
-          <span class="badge" :class="app.status === 'running' ? 'badge-success' : 'badge-muted'">{{ app.status }}</span>
+          </div>
+          <div v-if="serverIp" class="access-row">
+            <span class="access-label">Direct (IP:port)</span>
+            <a :href="`http://${serverIp}:${app.port}`" target="_blank" rel="noopener" class="access-url">{{ serverIp }}:{{ app.port }}</a>
+          </div>
+          <p v-if="!app.domain && serverIp" class="card__muted" style="margin:0.5rem 0 0;">Set a domain in Edit to use a friendly URL.</p>
         </div>
       </section>
-      <section class="card">
+      <section class="card card--edit">
         <h2 class="card__title">Edit</h2>
-      <form @submit.prevent="save">
-        <fieldset :disabled="saving">
-          <div class="form-row form-row--2">
+        <form @submit.prevent="save" class="edit-form">
+          <fieldset :disabled="saving">
             <div class="form-group">
               <label>Domain</label>
-              <input v-model="edit.domain" type="text" placeholder="app.example.com" />
+              <div class="domain-row">
+                <input v-model="edit.domain" type="text" placeholder="app.example.com" class="domain-row__input" />
+                <label class="domain-row__ssl">
+                  <input v-model="edit.ssl_enabled" type="checkbox" />
+                  <span>SSL</span>
+                </label>
+              </div>
             </div>
             <div class="form-group">
               <label>Branch</label>
               <input v-model="edit.branch" type="text" placeholder="main or leave empty" />
             </div>
-          </div>
-          <div class="form-row form-row--2">
-            <div class="form-group form-group--checkbox">
-              <label><input v-model="edit.ssl_enabled" type="checkbox" /> Enable SSL</label>
+            <div class="form-row form-row--3">
+              <div class="form-group">
+                <label>Node version</label>
+                <select v-if="nodeVersionOptions.length" v-model="edit.node_version">
+                  <option v-for="v in nodeVersionOptions" :key="v" :value="v">{{ v }}</option>
+                </select>
+                <span v-else class="form-static">{{ app.node_version || '—' }}</span>
+              </div>
+              <div class="form-group">
+                <label>Install command</label>
+                <input v-model="edit.install_cmd" type="text" placeholder="npm install" />
+              </div>
+              <div class="form-group">
+                <label>Build command</label>
+                <input v-model="edit.build_cmd" type="text" placeholder="npm run build" />
+              </div>
             </div>
-          </div>
-          <div class="form-row form-row--3">
             <div class="form-group">
-              <label>Node version</label>
-              <select v-if="nodeVersionOptions.length" v-model="edit.node_version">
-                <option v-for="v in nodeVersionOptions" :key="v" :value="v">{{ v }}</option>
-              </select>
-              <span v-else class="form-static">{{ app.node_version || '—' }}</span>
+              <label>Start command</label>
+              <input v-model="edit.start_cmd" type="text" placeholder="npm start" />
             </div>
-            <div class="form-group">
-              <label>Install command</label>
-              <input v-model="edit.install_cmd" type="text" placeholder="npm install" />
-            </div>
-            <div class="form-group">
-              <label>Build command</label>
-              <input v-model="edit.build_cmd" type="text" placeholder="npm run build" />
-            </div>
-          </div>
-          <div class="form-group">
-            <label>Start command</label>
-            <input v-model="edit.start_cmd" type="text" placeholder="npm start" />
-          </div>
-          <button type="submit" class="btn btn-primary" :disabled="saving">Save</button>
-        </fieldset>
-      </form>
+            <button type="submit" class="btn btn-primary" :disabled="saving">Save</button>
+          </fieldset>
+        </form>
       </section>
       <section class="card">
         <h2 class="card__title">Update from repo</h2>
@@ -115,10 +119,15 @@
         </div>
         <p v-if="envError" class="card__error">{{ envError }}</p>
       </section>
-      <section class="card">
-        <h2 class="card__title">Logs</h2>
-        <pre class="logs">{{ logs }}</pre>
-        <button type="button" class="btn" @click="loadLogs" :disabled="saving">Refresh logs</button>
+      <section class="card card--logs">
+        <div class="logs-header">
+          <h2 class="card__title">Logs</h2>
+          <div class="logs-actions">
+            <button type="button" class="btn btn-sm" @click="copyLogs" :disabled="!logs">Copy</button>
+            <button type="button" class="btn btn-sm" @click="loadLogs" :disabled="saving">Refresh</button>
+          </div>
+        </div>
+        <pre ref="logsPre" class="logs">{{ logs }}</pre>
       </section>
     </div>
     <div v-if="showDeleteModal" class="modal-overlay" @click.self="closeDeleteModal">
@@ -181,6 +190,7 @@ const busyBuild = ref(false);
 const busyPull = ref(false);
 const busyRedeploy = ref(false);
 const busy = computed(() => busyInstall.value || busyBuild.value);
+const logsPre = ref(null);
 
 function setFeedback(type, message) {
   if (feedbackTimer.value) clearTimeout(feedbackTimer.value);
@@ -258,6 +268,16 @@ async function loadLogs() {
   } catch (_) {
     logs.value = 'Failed to load logs';
     setFeedback('error', 'Failed to load logs.');
+  }
+}
+
+async function copyLogs() {
+  if (!logs.value) return;
+  try {
+    await navigator.clipboard.writeText(logs.value);
+    setFeedback('success', 'Logs copied to clipboard.');
+  } catch (_) {
+    setFeedback('error', 'Copy failed.');
   }
 }
 
@@ -466,12 +486,17 @@ async function doDelete() {
 }
 .app-detail-title {
   min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.75rem;
 }
 .app-detail-back {
   font-size: 0.875rem;
   color: var(--text-muted);
   margin-bottom: 0.25rem;
   display: inline-block;
+  width: 100%;
 }
 .app-detail-back:hover {
   color: var(--accent);
@@ -479,23 +504,107 @@ async function doDelete() {
 .app-detail-title .page-title {
   margin: 0;
 }
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8125rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  font-weight: 500;
+}
+.status-pill__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.status-pill--running {
+  background: rgba(34, 197, 94, 0.2);
+  color: var(--success);
+}
+.status-pill--running .status-pill__dot {
+  background: var(--success);
+}
+.status-pill--stopped {
+  background: var(--bg-hover);
+  color: var(--text-muted);
+}
+.status-pill--stopped .status-pill__dot {
+  background: var(--text-muted);
+}
 .app-detail-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
 }
-.app-detail-grid {
-  display: grid;
-  gap: 1rem;
+.card--access .card__title {
+  margin-bottom: 0.75rem;
+}
+.access-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.access-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.access-label {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  min-width: 6rem;
+}
+.access-url {
+  font-family: ui-monospace, monospace;
+  font-size: 0.9375rem;
+}
+.domain-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.domain-row__input {
+  flex: 1;
+  min-width: 180px;
+}
+.domain-row__ssl {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9375rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.domain-row__ssl input {
+  width: auto;
+}
+.edit-form .form-group {
   margin-bottom: 1rem;
 }
-.app-detail-grid--top {
-  grid-template-columns: 1fr auto;
+.edit-form .form-row {
+  margin-bottom: 1rem;
 }
-@media (max-width: 640px) {
-  .app-detail-grid--top {
-    grid-template-columns: 1fr;
-  }
+.logs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.logs-header .card__title {
+  margin: 0;
+}
+.logs-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+.logs-actions .btn {
+  font-size: 0.875rem;
+  padding: 0.35rem 0.65rem;
 }
 .card__title {
   margin: 0 0 0.75rem;
@@ -577,12 +686,13 @@ section.card + section.card {
   border-radius: var(--radius);
   padding: 1rem;
   font-size: 0.8rem;
-  overflow-x: auto;
-  max-height: 300px;
-  overflow-y: auto;
   margin: 0;
   white-space: pre-wrap;
   word-break: break-all;
+  overflow: auto;
+  max-height: 320px;
+  user-select: text;
+  cursor: text;
 }
 .modal-overlay {
   position: fixed;
