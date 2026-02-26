@@ -1007,39 +1007,38 @@ async function doDelete() {
 .detail-tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.25rem;
-  margin-bottom: 1.25rem;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 0;
+  gap: 0.375rem;
+  margin-bottom: 1.5rem;
 }
 .detail-tabs__tab {
-  padding: 0.5rem 1rem;
+  padding: 0.6rem 1.1rem;
   font-size: 0.875rem;
+  font-weight: 500;
   border: none;
-  border-radius: var(--radius) var(--radius) 0 0;
-  background: transparent;
+  border-radius: var(--radius);
+  background: var(--bg-hover);
   color: var(--text-muted);
   cursor: pointer;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.4rem;
+  transition: color 0.15s ease, background-color 0.15s ease;
 }
 .detail-tabs__tab:hover {
   color: var(--text);
-  background: var(--bg-hover);
+  background: var(--border);
 }
 .detail-tabs__tab.detail-tabs__tab--active {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
+  color: var(--text);
   background: var(--bg-card);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 .detail-tabs__dot {
   color: var(--warn);
-  font-weight: bold;
-  font-size: 1.1rem;
+  font-weight: 600;
+  font-size: 0.75rem;
   line-height: 1;
+  opacity: 0.9;
 }
 .detail-tab-panel {
   min-height: 0;
