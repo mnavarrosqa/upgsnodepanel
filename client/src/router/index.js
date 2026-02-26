@@ -12,6 +12,7 @@ const routes = [
       { path: 'node', name: 'NodeVersions', component: () => import('../views/NodeVersions.vue') },
       { path: 'apps', name: 'Apps', component: () => import('../views/Apps.vue') },
       { path: 'apps/:id', name: 'AppDetail', component: () => import('../views/AppDetail.vue') },
+      { path: 'maintenance', name: 'Maintenance', component: () => import('../views/Maintenance.vue') },
     ],
   },
 ];

@@ -118,6 +118,7 @@
               <th>Name</th>
               <th>Domain</th>
               <th>Port</th>
+              <th>Size</th>
               <th>SSL</th>
               <th>Status</th>
               <th>Actions</th>
@@ -128,6 +129,7 @@
               <td><router-link :to="`/apps/${app.id}`">{{ app.name }}</router-link></td>
               <td>{{ app.domain || '—' }}</td>
               <td>{{ app.port }}</td>
+              <td>{{ formatSize(app.size) }}</td>
               <td>
                 <span v-if="app.ssl_active" class="badge badge-success" title="SSL active">SSL ✓</span>
                 <span v-else-if="app.ssl_enabled" class="badge badge-warn" title="Certificate pending">SSL …</span>
@@ -212,6 +214,15 @@ const form = ref({
 function onZipSelect(e) {
   const f = e.target.files && e.target.files[0];
   zipFile.value = f || null;
+}
+
+function formatSize(bytes) {
+  if (bytes == null) return '—';
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${(bytes / Math.pow(k, i)).toFixed(i <= 1 ? 0 : 1)} ${units[i]}`;
 }
 
 const loadError = ref('');

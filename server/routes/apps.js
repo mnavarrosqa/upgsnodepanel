@@ -36,6 +36,7 @@ function appToJson(row) {
     ssl_enabled: sslEnabled,
     ssl_active: sslActive,
     status: appManager.getPm2Status(row),
+    size: appManager.getAppSize(row),
   };
 }
 

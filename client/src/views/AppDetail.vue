@@ -50,6 +50,21 @@
           <p v-if="!app.domain && serverIp" class="card__muted" style="margin:0.5rem 0 0;">Set a domain in Edit to use a friendly URL.</p>
         </div>
       </section>
+      <section class="card card--size">
+        <h2 class="card__title">Size</h2>
+        <p class="card__muted">Disk space used by this app’s directory (source, dependencies, build output).</p>
+        <div class="access-list">
+          <div class="access-row">
+            <span class="access-label">Total</span>
+            <span class="access-url">{{ formatSize(app.size) }}</span>
+          </div>
+          <div v-if="app.size != null" class="access-row">
+            <span class="access-label">Bytes</span>
+            <span class="access-url">{{ app.size.toLocaleString() }}</span>
+          </div>
+          <p v-if="app.size == null" class="card__muted" style="margin:0.5rem 0 0;">App directory not created yet.</p>
+        </div>
+      </section>
       <section class="card card--edit">
         <h2 class="card__title">Edit</h2>
         <form @submit.prevent="save" class="edit-form">
@@ -192,6 +207,15 @@ const busyPull = ref(false);
 const busyRedeploy = ref(false);
 const busy = computed(() => busyInstall.value || busyBuild.value);
 const logsPre = ref(null);
+
+function formatSize(bytes) {
+  if (bytes == null) return '—';
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${(bytes / Math.pow(k, i)).toFixed(i <= 1 ? 0 : 1)} ${units[i]}`;
+}
 
 function setFeedback(type, message) {
   if (feedbackTimer.value) clearTimeout(feedbackTimer.value);

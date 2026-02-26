@@ -1,8 +1,35 @@
 import { Router } from 'express';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import dns from 'dns/promises';
-import { run, runGit } from '../lib/exec.js';
+import { run, runGit, runPm2 } from '../lib/exec.js';
 
 export const systemRouter = Router();
+
+const PM2_ENV = {
+  ...process.env,
+  HOME: process.env.HOME || '/root',
+  PM2_HOME: process.env.PM2_HOME || (process.env.HOME || '/root') + '/.pm2',
+};
+
+const MAINTENANCE_OPTIONS = [
+  {
+    id: 'npm_cache',
+    label: 'npm cache',
+    description: 'Clear the global npm cache (downloaded packages). Safe; packages will be re-downloaded when needed.',
+  },
+  {
+    id: 'pm2_logs',
+    label: 'PM2 logs',
+    description: 'Flush PM2 log files (out/err logs for all processes). Does not affect running apps.',
+  },
+  {
+    id: 'temp_uploads',
+    label: 'Temporary zip uploads',
+    description: 'Remove leftover .zip files from app creation uploads in the system temp directory.',
+  },
+];
 
 function getServerIp() {
   try {
@@ -87,6 +114,54 @@ systemRouter.get('/default-branch', (req, res, next) => {
     }
     if (!branch) return res.status(404).json({ error: 'Could not detect default branch' });
     res.json({ branch });
+  } catch (e) {
+    next(e);
+  }
+});
+
+systemRouter.get('/maintenance', (req, res, next) => {
+  try {
+    res.json({ options: MAINTENANCE_OPTIONS });
+  } catch (e) {
+    next(e);
+  }
+});
+
+systemRouter.post('/maintenance/clean', (req, res, next) => {
+  try {
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    const allowed = new Set(MAINTENANCE_OPTIONS.map((o) => o.id));
+    const toRun = items.filter((id) => allowed.has(id));
+    const results = [];
+
+    for (const id of toRun) {
+      try {
+        if (id === 'npm_cache') {
+          run('npm cache clean --force', { withNvm: true });
+          results.push({ id, ok: true, message: 'npm cache cleared.' });
+        } else if (id === 'pm2_logs') {
+          runPm2(['flush'], { env: PM2_ENV });
+          results.push({ id, ok: true, message: 'PM2 logs flushed.' });
+        } else if (id === 'temp_uploads') {
+          const tmpDir = os.tmpdir();
+          const entries = fs.readdirSync(tmpDir, { withFileTypes: true });
+          let removed = 0;
+          for (const e of entries) {
+            if (e.isFile() && e.name.startsWith('upgs-upload-') && e.name.toLowerCase().endsWith('.zip')) {
+              try {
+                fs.unlinkSync(path.join(tmpDir, e.name));
+                removed++;
+              } catch (_) {}
+            }
+          }
+          results.push({ id, ok: true, message: `Removed ${removed} temporary zip file(s).` });
+        }
+      } catch (e) {
+        results.push({ id, ok: false, message: e.message || 'Clean failed.' });
+      }
+    }
+
+    res.json({ results });
   } catch (e) {
     next(e);
   }

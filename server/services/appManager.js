@@ -27,6 +27,35 @@ function appDir(app) {
 }
 
 /**
+ * Recursive directory size in bytes. Uses stat (follows symlinks). Returns 0 for empty or missing dir.
+ */
+function dirSizeSync(dirPath) {
+  if (!fs.existsSync(dirPath)) return 0;
+  let total = 0;
+  const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+  for (const e of entries) {
+    const full = path.join(dirPath, e.name);
+    try {
+      const stat = fs.statSync(full);
+      if (stat.isFile()) total += stat.size;
+      else if (stat.isDirectory()) total += dirSizeSync(full);
+    } catch (_) {
+      // skip permission errors or broken symlinks
+    }
+  }
+  return total;
+}
+
+/**
+ * Returns the on-disk size of the app directory in bytes, or null if the directory does not exist.
+ */
+export function getAppSize(app) {
+  const dir = appDir(app);
+  if (!fs.existsSync(dir)) return null;
+  return dirSizeSync(dir);
+}
+
+/**
  * Clones or updates the app repo. Returns { dir, actualBranch }.
  * If app.branch is empty/null, uses the repo's default branch (auto-detect). Otherwise checks out the given branch (with main→master fallback).
  */
