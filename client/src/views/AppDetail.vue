@@ -64,7 +64,7 @@
                 </label>
               </div>
             </div>
-            <div class="form-group">
+            <div v-if="!isUploadApp" class="form-group">
               <label>Branch</label>
               <input v-model="edit.branch" type="text" placeholder="main or leave empty" />
             </div>
@@ -93,7 +93,7 @@
           </fieldset>
         </form>
       </section>
-      <section class="card">
+      <section v-if="!isUploadApp" class="card">
         <h2 class="card__title">Update from repo</h2>
         <p class="card__muted">Pull latest from the repo. Save first if you changed the branch above. Redeploy also runs install, build, and restart.</p>
         <div class="action-btns">
@@ -173,6 +173,7 @@ const nodeVersionOptions = computed(() => {
   if (current && !list.includes(current)) list.push(current);
   return list.sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
 });
+const isUploadApp = computed(() => app.value && String(app.value.repo_url || '') === 'upload://');
 const serverIp = ref('');
 const logs = ref('');
 const saving = ref(false);

@@ -10,12 +10,15 @@ import { validateAppInput, validateName, validateDomain, validateCommand, valida
 
 export const appsRouter = Router();
 
+const ZIP_MAX_SIZE = 250 * 1024 * 1024; // 250MB
+const ZIP_UPLOAD_TIMEOUT_MS = 15 * 60 * 1000; // 15 min for slow uploads
+
 const upload = multer({
   storage: multer.diskStorage({
     destination: (_, __, cb) => cb(null, os.tmpdir()),
     filename: (_, file, cb) => cb(null, `upgs-upload-${Date.now()}-${path.basename(file.originalname || 'app.zip')}`),
   }),
-  limits: { fileSize: 100 * 1024 * 1024 },
+  limits: { fileSize: ZIP_MAX_SIZE },
   fileFilter: (_, file, cb) => {
     const name = (file.originalname || '').toLowerCase();
     if (name.endsWith('.zip')) return cb(null, true);
@@ -76,6 +79,7 @@ function buildCreateDataFromBody(body, isZip = false) {
 }
 
 appsRouter.post('/from-zip', upload.single('zip'), async (req, res, next) => {
+  req.setTimeout(ZIP_UPLOAD_TIMEOUT_MS);
   const stream = req.query.stream === '1' || req.get('Accept') === 'application/x-ndjson';
   let zipPath = null;
   try {
