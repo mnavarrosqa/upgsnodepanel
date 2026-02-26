@@ -5,6 +5,7 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import session from 'express-session';
+import { SqliteSessionStore } from './lib/sessionStore.js';
 import { authRouter, requireAuth } from './auth.js';
 import { nodeRouter } from './routes/node.js';
 import { appsRouter } from './routes/apps.js';
@@ -20,18 +21,20 @@ app.use(cookieParser());
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET || 'upgs-panel-secret',
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      secure: isProduction,
-      httpOnly: true,
-      maxAge: 24 * 60 * 60 * 1000,
-    },
-  })
-);
+const sessionConfig = {
+  secret: process.env.SESSION_SECRET || 'upgs-panel-secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: isProduction,
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000,
+  },
+};
+if (isProduction) {
+  sessionConfig.store = new SqliteSessionStore();
+}
+app.use(session(sessionConfig));
 
 app.use('/api', authRouter);
 app.use('/api/node', requireAuth, nodeRouter);

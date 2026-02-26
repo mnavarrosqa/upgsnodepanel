@@ -23,6 +23,12 @@ function getDb() {
 
 function initSchema(database) {
   database.exec(`
+    CREATE TABLE IF NOT EXISTS sessions (
+      sid TEXT PRIMARY KEY,
+      session TEXT NOT NULL,
+      expires INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS sessions_expires ON sessions(expires);
     CREATE TABLE IF NOT EXISTS apps (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE,
