@@ -26,12 +26,13 @@ app.use(cookieParser());
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 
+const useSecureCookie = process.env.PANEL_HTTPS === '1' || process.env.PANEL_HTTPS === 'true';
 const sessionConfig = {
   secret: process.env.SESSION_SECRET || 'upgs-panel-secret',
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: isProduction,
+    secure: useSecureCookie,
     httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000,
   },
