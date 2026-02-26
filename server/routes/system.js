@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { spawnSync } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -30,6 +31,101 @@ const MAINTENANCE_OPTIONS = [
     description: 'Remove leftover .zip files from app creation uploads in the system temp directory.',
   },
 ];
+
+function dirSizeSync(dirPath) {
+  if (!fs.existsSync(dirPath)) return 0;
+  let total = 0;
+  const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+  for (const e of entries) {
+    const full = path.join(dirPath, e.name);
+    try {
+      const stat = fs.statSync(full);
+      if (stat.isFile()) total += stat.size;
+      else if (stat.isDirectory()) total += dirSizeSync(full);
+    } catch (_) {}
+  }
+  return total;
+}
+
+function getOwner(filePath) {
+  try {
+    const stat = fs.statSync(filePath);
+    const result = spawnSync('stat', ['-c', '%U', filePath], { encoding: 'utf-8' });
+    if (result.status === 0 && result.stdout) return result.stdout.trim();
+    return String(stat.uid);
+  } catch (_) {
+    return '—';
+  }
+}
+
+function getNpmCachePath() {
+  try {
+    const { stdout } = run('npm config get cache', { withNvm: true });
+    const p = (stdout || '').trim();
+    return p && p !== 'undefined' ? p : null;
+  } catch (_) {
+    return (process.env.HOME || '/root') + '/.npm';
+  }
+}
+
+function getMaintenanceOverview() {
+  const options = MAINTENANCE_OPTIONS.map((opt) => ({ ...opt, size: 0, details: [] }));
+
+  for (const opt of options) {
+    if (opt.id === 'npm_cache') {
+      const cachePath = getNpmCachePath();
+      if (cachePath && fs.existsSync(cachePath)) {
+        opt.size = dirSizeSync(cachePath);
+        opt.details.push({
+          path: cachePath,
+          size: opt.size,
+          owner: getOwner(cachePath),
+          app: null,
+        });
+      }
+    } else if (opt.id === 'pm2_logs') {
+      const logsDir = path.join(PM2_ENV.PM2_HOME, 'logs');
+      if (fs.existsSync(logsDir)) {
+        const entries = fs.readdirSync(logsDir, { withFileTypes: true });
+        for (const e of entries) {
+          if (!e.isFile()) continue;
+          const full = path.join(logsDir, e.name);
+          try {
+            const stat = fs.statSync(full);
+            const appMatch = e.name.match(/^(.+?)-(out|err)\.log$/);
+            opt.size += stat.size;
+            opt.details.push({
+              path: e.name,
+              size: stat.size,
+              owner: getOwner(full),
+              app: appMatch ? appMatch[1] : null,
+            });
+          } catch (_) {}
+        }
+      }
+    } else if (opt.id === 'temp_uploads') {
+      const tmpDir = os.tmpdir();
+      const entries = fs.readdirSync(tmpDir, { withFileTypes: true }).filter(
+        (e) => e.isFile() && e.name.startsWith('upgs-upload-') && e.name.toLowerCase().endsWith('.zip')
+      );
+      for (const e of entries) {
+        const full = path.join(tmpDir, e.name);
+        try {
+          const stat = fs.statSync(full);
+          opt.size += stat.size;
+          opt.details.push({
+            path: full,
+            size: stat.size,
+            owner: getOwner(full),
+            app: null,
+          });
+        } catch (_) {}
+      }
+    }
+  }
+
+  return options;
+}
 
 function getServerIp() {
   try {
@@ -121,11 +217,37 @@ systemRouter.get('/default-branch', (req, res, next) => {
 
 systemRouter.get('/maintenance', (req, res, next) => {
   try {
-    res.json({ options: MAINTENANCE_OPTIONS });
+    const options = getMaintenanceOverview();
+    res.json({ options });
   } catch (e) {
     next(e);
   }
 });
+
+function getSizeBeforeClean(id) {
+  if (id === 'npm_cache') {
+    const cachePath = getNpmCachePath();
+    return cachePath && fs.existsSync(cachePath) ? dirSizeSync(cachePath) : 0;
+  }
+  if (id === 'pm2_logs') {
+    const logsDir = path.join(PM2_ENV.PM2_HOME, 'logs');
+    return fs.existsSync(logsDir) ? dirSizeSync(logsDir) : 0;
+  }
+  if (id === 'temp_uploads') {
+    const tmpDir = os.tmpdir();
+    let total = 0;
+    const entries = fs.readdirSync(tmpDir, { withFileTypes: true });
+    for (const e of entries) {
+      if (e.isFile() && e.name.startsWith('upgs-upload-') && e.name.toLowerCase().endsWith('.zip')) {
+        try {
+          total += fs.statSync(path.join(tmpDir, e.name)).size;
+        } catch (_) {}
+      }
+    }
+    return total;
+  }
+  return 0;
+}
 
 systemRouter.post('/maintenance/clean', (req, res, next) => {
   try {
@@ -135,13 +257,14 @@ systemRouter.post('/maintenance/clean', (req, res, next) => {
     const results = [];
 
     for (const id of toRun) {
+      const sizeBefore = getSizeBeforeClean(id);
       try {
         if (id === 'npm_cache') {
           run('npm cache clean --force', { withNvm: true });
-          results.push({ id, ok: true, message: 'npm cache cleared.' });
+          results.push({ id, ok: true, message: 'npm cache cleared.', freed: sizeBefore });
         } else if (id === 'pm2_logs') {
           runPm2(['flush'], { env: PM2_ENV });
-          results.push({ id, ok: true, message: 'PM2 logs flushed.' });
+          results.push({ id, ok: true, message: 'PM2 logs flushed.', freed: sizeBefore });
         } else if (id === 'temp_uploads') {
           const tmpDir = os.tmpdir();
           const entries = fs.readdirSync(tmpDir, { withFileTypes: true });
@@ -154,10 +277,10 @@ systemRouter.post('/maintenance/clean', (req, res, next) => {
               } catch (_) {}
             }
           }
-          results.push({ id, ok: true, message: `Removed ${removed} temporary zip file(s).` });
+          results.push({ id, ok: true, message: `Removed ${removed} temporary zip file(s).`, freed: sizeBefore });
         }
       } catch (e) {
-        results.push({ id, ok: false, message: e.message || 'Clean failed.' });
+        results.push({ id, ok: false, message: e.message || 'Clean failed.', freed: 0 });
       }
     }
 
