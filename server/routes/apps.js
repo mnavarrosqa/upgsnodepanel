@@ -90,9 +90,12 @@ appsRouter.post('/', async (req, res, next) => {
         send({ step: 'build_done', stdout: buildOut.stdout || '', stderr: buildOut.stderr || '' });
       }
 
+      let nginxResult = {};
       if (app.domain) {
         send({ step: 'nginx', message: 'Configuring nginx…' });
-        appManager.setupNginxAndReload(app);
+        if (app.ssl_enabled) send({ step: 'ssl', message: 'Obtaining SSL certificate…' });
+        nginxResult = appManager.setupNginxAndReload(app);
+        if (app.ssl_enabled) send({ step: 'ssl_done', message: nginxResult.sslError ? 'SSL certificate could not be obtained' : 'SSL ready', sslError: nginxResult.sslError });
         send({ step: 'nginx_done' });
       }
 
@@ -102,7 +105,7 @@ appsRouter.post('/', async (req, res, next) => {
 
       const finalApp = appToJson(db.getApp(app.id));
       if (stream) {
-        writeStreamLine(res, { done: true, app: finalApp });
+        writeStreamLine(res, { done: true, app: finalApp, sslWarning: nginxResult.sslError || undefined });
         res.end();
       } else {
         res.status(201).json(finalApp);

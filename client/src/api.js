@@ -68,6 +68,7 @@ export const api = {
       let buf = '';
       let lastApp = null;
       let lastError = null;
+      let lastSslWarning = null;
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
@@ -79,7 +80,10 @@ export const api = {
           try {
             const ev = JSON.parse(line);
             if (onEvent) onEvent(ev);
-            if (ev.done && ev.app) lastApp = ev.app;
+            if (ev.done && ev.app) {
+              lastApp = ev.app;
+              if (ev.sslWarning) lastSslWarning = ev.sslWarning;
+            }
             if (ev.error) lastError = ev.error;
           } catch (_) {}
         }
@@ -88,12 +92,15 @@ export const api = {
         try {
           const ev = JSON.parse(buf);
           if (onEvent) onEvent(ev);
-          if (ev.done && ev.app) lastApp = ev.app;
+          if (ev.done && ev.app) {
+            lastApp = ev.app;
+            if (ev.sslWarning) lastSslWarning = ev.sslWarning;
+          }
           if (ev.error) lastError = ev.error;
         } catch (_) {}
       }
       if (lastError) throw new Error(lastError);
-      if (lastApp) return lastApp;
+      if (lastApp) return { app: lastApp, sslWarning: lastSslWarning || undefined };
       throw new Error('Create failed');
     },
     update: (id, data) => request(`/api/apps/${id}`, { method: 'PUT', body: JSON.stringify(data) }),

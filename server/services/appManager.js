@@ -172,25 +172,32 @@ export function getLogs(app, lines = 100) {
   }
 }
 
+/**
+ * Set up nginx vhost for the app and optionally obtain SSL cert. Returns { sslError } if SSL was requested but certbot failed.
+ */
 export function setupNginxAndReload(app) {
   const domain = app.domain && String(app.domain).trim();
   if (!domain) {
     writeAppConfig(app);
     reloadNginx();
-    return;
+    return {};
   }
   // Write HTTP-only vhost first so the domain is in nginx (required for certbot --nginx)
   writeAppConfig(app, true);
   reloadNginx();
+  let sslError = null;
   if (app.ssl_enabled && !certsExist(domain)) {
     try {
       obtainCert(domain);
     } catch (e) {
       console.warn('Could not obtain SSL cert for', domain, e.message);
+      const msg = (e.stderr || e.stdout || e.message || 'Certbot failed').toString().trim();
+      sslError = msg.split('\n').pop() || e.message || 'Could not obtain certificate';
     }
   }
   writeAppConfig(app);
   reloadNginx();
+  return sslError ? { sslError } : {};
 }
 
 export function teardownNginx(app) {

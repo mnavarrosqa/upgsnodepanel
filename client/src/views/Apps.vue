@@ -92,6 +92,7 @@
           <h3 style="margin:0 0 0.5rem; font-size:1rem;">{{ createError ? 'Creation failed' : 'App created' }}</h3>
           <p v-if="createError" style="margin:0 0 1rem; font-size:0.875rem; color:var(--danger);">{{ createError }}</p>
           <p v-else style="margin:0 0 1rem; font-size:0.875rem; color:var(--text-muted);">The app is running. You can open it from the list below.</p>
+          <p v-if="creationSslWarning" style="margin:0 0 1rem; font-size:0.875rem; color:var(--warn);">SSL could not be obtained: {{ creationSslWarning }}</p>
           <pre v-if="creationLogs && (createError || creationStep)" class="creation-logs">{{ creationStep }}\n{{ creationLogs }}</pre>
           <button type="button" class="btn btn-primary" @click="closeCreationOverlay" style="margin-top:1rem;">Close</button>
         </div>
@@ -178,6 +179,7 @@ const creationDone = ref(false);
 const createError = ref('');
 const creationStep = ref('');
 const creationLogs = ref('');
+const creationSslWarning = ref('');
 const domainCheckStatus = ref('');
 const domainCheckMessage = ref('');
 const branchDetected = ref('');
@@ -338,6 +340,8 @@ const stepLabels = {
   build: 'Running build…',
   build_done: 'Build complete',
   nginx: 'Configuring nginx…',
+  ssl: 'Obtaining SSL certificate…',
+  ssl_done: 'SSL ready',
   nginx_done: 'Nginx configured',
   start: 'Starting app…',
   start_done: 'App started',
@@ -354,7 +358,7 @@ async function create() {
   creationLogs.value = '';
   creating.value = true;
   try {
-    await api.apps.createWithProgress(form.value, (ev) => {
+    const result = await api.apps.createWithProgress(form.value, (ev) => {
       if (ev.step) {
         creationStep.value = ev.message || stepLabels[ev.step] || ev.step;
         if (ev.stdout || ev.stderr) {
@@ -362,9 +366,11 @@ async function create() {
           appendLogs(lines, ev.stdout, ev.stderr);
           creationLogs.value = lines.join('\n');
         }
+        if (ev.sslError) creationLogs.value = (creationLogs.value ? creationLogs.value + '\n' : '') + ev.sslError;
       }
       if (ev.error) createError.value = ev.error;
     });
+    creationSslWarning.value = result.sslWarning || '';
     showForm.value = false;
     form.value = { name: '', repo_url: '', branch: '', node_version: nodeVersions.value[0] || '20', install_cmd: 'npm install', build_cmd: '', start_cmd: 'npm start', domain: '', ssl_enabled: false };
     domainCheckStatus.value = '';
@@ -385,6 +391,7 @@ function closeCreationOverlay() {
   creationStep.value = '';
   creationLogs.value = '';
   createError.value = '';
+  creationSslWarning.value = '';
 }
 </script>
 
