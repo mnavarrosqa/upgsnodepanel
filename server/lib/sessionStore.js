@@ -1,12 +1,15 @@
-import { EventEmitter } from 'events';
+import { createRequire } from 'module';
 import { getDb } from '../db.js';
+
+const require = createRequire(import.meta.url);
+const Store = require('express-session/session/store');
 
 /**
  * SQLite session store for express-session (production).
  * Uses the same DB as the panel; sessions table is created in db.js initSchema.
- * Extends EventEmitter so express-session can call store.on('disconnect', ...).
+ * Extends express-session's Store so createSession and other methods exist.
  */
-export class SqliteSessionStore extends EventEmitter {
+export class SqliteSessionStore extends Store {
   constructor() {
     super();
     this.db = getDb();
@@ -49,12 +52,5 @@ export class SqliteSessionStore extends EventEmitter {
 
   touch(sid, session, callback) {
     this.set(sid, session, callback);
-  }
-
-  regenerate(req, callback) {
-    this.destroy(req.sessionID, (err) => {
-      if (typeof this.generate === 'function') this.generate(req);
-      callback(err);
-    });
   }
 }
