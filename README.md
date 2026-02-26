@@ -14,11 +14,10 @@ Manage and install Node.js apps on your VPS. Log in with your server (root) user
 
 ## Requirements
 
-- Linux (Ubuntu/Debian or RHEL-family) with root or sudo
-- nginx, git, Node.js 18+ (install via nvm recommended)
-- PM2: `npm install -g pm2`
-- PAM: `libpam0g-dev` (Debian/Ubuntu) or `pam-devel` (RHEL) for build
-- Optional: certbot for app SSL
+- **Ubuntu 20, 22, 24, or 25** (installer supports these only)
+- root or sudo
+- The installer installs: nginx, git, Node.js (via nvm), PM2, PAM dev headers
+- Optional: certbot for app SSL (installed by script when available)
 
 ## Quick start (development)
 
@@ -57,7 +56,7 @@ Open http://localhost:3000 and log in (with SKIP_PAM=1, any username/password wo
 
 ## Installer
 
-On a fresh Linux server (as root or with sudo):
+On a fresh **Ubuntu 20–25** server (as root or with sudo):
 
 ```bash
 # One-liner: clone repo and run installer
