@@ -48,6 +48,12 @@ nvm use --lts 2>/dev/null || nvm use 20
 echo "[*] Installing PM2..."
 npm install -g pm2
 
+# Make node and pm2 available to systemd and to the shell (nvm path is not in PATH for services or new shells)
+for bin in node npm pm2; do
+  B="$(command -v "$bin" 2>/dev/null)"
+  [ -n "$B" ] && ln -sf "$B" "/usr/local/bin/$bin"
+done
+
 echo "[*] Installing panel to $INSTALL_DIR..."
 mkdir -p "$(dirname "$INSTALL_DIR")"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -82,8 +88,15 @@ mkdir -p "$APPS_BASE_PATH"
 mkdir -p "$NGINX_APPS_CONF_DIR"
 
 echo "[*] Installing systemd unit..."
+NODE_BIN="$(command -v node)"
+# Ensure PATH for the service includes node/pm2 (in case /usr/local/bin is not in systemd's default PATH)
 cp packaging/upgs-node-panel.service /etc/systemd/system/
 sed -i "s|/opt/upgs-node-panel|$INSTALL_DIR|g" /etc/systemd/system/upgs-node-panel.service
+sed -i "s|^ExecStart=.*|ExecStart=$NODE_BIN server/index.js|" /etc/systemd/system/upgs-node-panel.service
+# Prepend PATH so node and pm2 are found when the panel runs (e.g. pm2 for managed apps)
+if ! grep -q '^Environment=PATH=' /etc/systemd/system/upgs-node-panel.service; then
+  sed -i "/^Environment=NODE_ENV/a Environment=PATH=/usr/local/bin:/usr/bin:/bin" /etc/systemd/system/upgs-node-panel.service
+fi
 systemctl daemon-reload
 systemctl enable upgs-node-panel
 systemctl start upgs-node-panel
