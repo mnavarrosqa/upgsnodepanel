@@ -1,24 +1,26 @@
 <template>
   <div v-if="app">
+    <p v-if="saving" class="saving-banner">Saving…</p>
+    <div class="app-detail-content" :class="{ 'is-disabled': saving }">
     <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:1rem; margin-bottom:1.5rem;">
       <div>
         <router-link to="/apps" style="font-size:0.875rem; color:var(--text-muted); margin-bottom:0.25rem; display:inline-block;">← Apps</router-link>
         <h1 class="page-title" style="margin:0;">{{ app.name }}</h1>
       </div>
       <div class="action-btns">
-        <button type="button" class="btn" @click="doStart" :disabled="app.status === 'running'" title="Run">
+        <button type="button" class="btn" @click="doStart" :disabled="app.status === 'running' || saving" title="Run">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
           Run
         </button>
-        <button type="button" class="btn" @click="doStop" :disabled="app.status !== 'running'" title="Pause">
+        <button type="button" class="btn" @click="doStop" :disabled="app.status !== 'running' || saving" title="Pause">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
           Pause
         </button>
-        <button type="button" class="btn" @click="doRestart" title="Restart">
+        <button type="button" class="btn" @click="doRestart" :disabled="saving" title="Restart">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
           Restart
         </button>
-        <button type="button" class="btn btn-danger" @click="confirmDelete" title="Delete">Delete</button>
+        <button type="button" class="btn btn-danger" @click="confirmDelete" :disabled="saving" title="Delete">Delete</button>
       </div>
     </div>
     <div class="grid-2">
@@ -42,6 +44,7 @@
     <div class="card">
       <h3 style="margin:0 0 1rem; font-size:1rem;">Edit</h3>
       <form @submit.prevent="save">
+        <fieldset :disabled="saving">
         <div class="form-group">
           <label>Domain</label>
           <input v-model="edit.domain" type="text" placeholder="app.example.com" />
@@ -72,29 +75,31 @@
           <input v-model="edit.start_cmd" type="text" />
         </div>
         <button type="submit" class="btn btn-primary" :disabled="saving">Save</button>
+        </fieldset>
       </form>
     </div>
     <div class="card">
       <h3 style="margin:0 0 0.75rem; font-size:1rem;">Actions</h3>
       <div class="action-btns">
-        <button type="button" class="btn" @click="runInstall" :disabled="busy">Run install</button>
-        <button type="button" class="btn" @click="runBuild" :disabled="busy">Run build</button>
+        <button type="button" class="btn" @click="runInstall" :disabled="busy || saving">Run install</button>
+        <button type="button" class="btn" @click="runBuild" :disabled="busy || saving">Run build</button>
       </div>
     </div>
     <div class="card">
       <h3 style="margin:0 0 0.75rem; font-size:1rem;">Environment (.env)</h3>
       <p style="margin:0 0 0.5rem; font-size:0.875rem; color:var(--text-muted);">Variables for this app. Restart the app for changes to take effect.</p>
-      <textarea v-model="envContent" class="env-editor" placeholder="NODE_ENV=production&#10;PORT=3000" rows="10" spellcheck="false" />
+      <textarea v-model="envContent" class="env-editor" placeholder="NODE_ENV=production&#10;PORT=3000" rows="10" spellcheck="false" :disabled="saving" />
       <div class="action-btns" style="margin-top:0.5rem;">
-        <button type="button" class="btn btn-primary" @click="saveEnv" :disabled="savingEnv">Save .env</button>
-        <button type="button" class="btn" @click="loadEnv">Reload</button>
+        <button type="button" class="btn btn-primary" @click="saveEnv" :disabled="savingEnv || saving">Save .env</button>
+        <button type="button" class="btn" @click="loadEnv" :disabled="saving">Reload</button>
       </div>
       <p v-if="envError" style="margin:0.5rem 0 0; font-size:0.875rem; color:var(--danger);">{{ envError }}</p>
     </div>
     <div class="card">
       <h3 style="margin:0 0 0.75rem; font-size:1rem;">Logs</h3>
       <pre class="logs">{{ logs }}</pre>
-      <button type="button" class="btn" @click="loadLogs" style="margin-top:0.5rem;">Refresh logs</button>
+      <button type="button" class="btn" @click="loadLogs" style="margin-top:0.5rem;" :disabled="saving">Refresh logs</button>
+    </div>
     </div>
     <div v-if="showDeleteModal" class="modal-overlay" @click.self="showDeleteModal = false">
       <div class="card modal">
@@ -278,6 +283,18 @@ async function doDelete() {
 </script>
 
 <style scoped>
+.saving-banner {
+  margin: 0 0 1rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--accent);
+  color: white;
+  font-size: 0.875rem;
+  border-radius: var(--radius);
+}
+.app-detail-content.is-disabled {
+  opacity: 0.7;
+  pointer-events: none;
+}
 .env-editor {
   width: 100%;
   min-height: 160px;

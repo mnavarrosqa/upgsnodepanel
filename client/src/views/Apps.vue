@@ -1,12 +1,13 @@
 <template>
   <div>
     <h1 class="page-title">Apps</h1>
-    <div class="card">
-      <button type="button" class="btn btn-primary" @click="showForm = true">Add app</button>
+    <div class="card" :class="{ 'is-disabled': creating }">
+      <button type="button" class="btn btn-primary" @click="showForm = true" :disabled="creating">Add app</button>
     </div>
-    <div class="card" v-if="showForm">
+    <div class="card" v-if="showForm" :class="{ 'is-disabled': creating }">
       <h3 style="margin:0 0 1rem;">New app</h3>
       <form @submit.prevent="create">
+        <fieldset :disabled="creating">
         <div class="form-group">
           <label>Name</label>
           <input v-model="form.name" type="text" required placeholder="my-app" />
@@ -43,7 +44,16 @@
         </div>
         <div class="form-group">
           <label>Domain (optional)</label>
-          <input v-model="form.domain" type="text" placeholder="app.example.com" />
+          <input
+            v-model="form.domain"
+            type="text"
+            placeholder="app.example.com"
+            @blur="checkDomain"
+          />
+          <p v-if="domainCheckStatus === 'checking'" class="domain-check domain-check--checking">Checking domain…</p>
+          <p v-else-if="domainCheckStatus === 'ok'" class="domain-check domain-check--ok">{{ domainCheckMessage }}</p>
+          <p v-else-if="domainCheckStatus === 'warn'" class="domain-check domain-check--warn">{{ domainCheckMessage }}</p>
+          <p v-else-if="domainCheckStatus === 'error'" class="domain-check domain-check--error">{{ domainCheckMessage }}</p>
         </div>
         <div class="form-group">
           <label style="display:flex; align-items:center; gap:0.5rem;">
@@ -53,8 +63,9 @@
         </div>
         <div class="action-btns" style="margin-top:1rem;">
           <button type="submit" class="btn btn-primary" :disabled="creating">Create app</button>
-          <button type="button" class="btn" @click="showForm = false">Cancel</button>
+          <button type="button" class="btn" @click="closeForm" :disabled="creating">Cancel</button>
         </div>
+        </fieldset>
       </form>
       <p v-if="createError" style="margin-top:0.5rem; color:var(--danger);">{{ createError }}</p>
     </div>
@@ -64,7 +75,7 @@
       <pre class="creation-logs">{{ creationLogs }}</pre>
     </div>
     <p v-if="loadError" style="color:var(--danger); margin-bottom:1rem;">{{ loadError }}</p>
-    <div class="card">
+    <div class="card" :class="{ 'is-disabled': creating }">
       <div class="table-wrap">
         <table>
           <thead>
@@ -108,6 +119,8 @@ const creating = ref(false);
 const createError = ref('');
 const creationStep = ref('');
 const creationLogs = ref('');
+const domainCheckStatus = ref('');
+const domainCheckMessage = ref('');
 const nodeVersions = ref([]);
 const form = ref({
   name: '',
@@ -142,6 +155,32 @@ async function loadNodeVersions() {
       form.value.node_version = list[0];
     }
   } catch (_) {}
+}
+
+function closeForm() {
+  showForm.value = false;
+  domainCheckStatus.value = '';
+  domainCheckMessage.value = '';
+}
+
+async function checkDomain() {
+  const domain = (form.value.domain || '').trim();
+  domainCheckStatus.value = '';
+  domainCheckMessage.value = '';
+  if (!domain) return;
+  domainCheckStatus.value = 'checking';
+  try {
+    const data = await api.system.checkDomain(domain);
+    domainCheckMessage.value = data.message || (data.resolves ? 'Domain resolves' : 'Domain does not resolve');
+    if (data.ok && data.resolves) {
+      domainCheckStatus.value = data.matches ? 'ok' : 'warn';
+    } else {
+      domainCheckStatus.value = 'error';
+    }
+  } catch (e) {
+    domainCheckStatus.value = 'error';
+    domainCheckMessage.value = e.message || 'Domain check failed';
+  }
 }
 
 onMounted(() => {
@@ -188,6 +227,8 @@ async function create() {
     form.value = { name: '', repo_url: '', branch: 'main', node_version: nodeVersions.value[0] || '20', install_cmd: 'npm install', build_cmd: '', start_cmd: 'npm start', domain: '', ssl_enabled: false };
     creationStep.value = '';
     creationLogs.value = '';
+    domainCheckStatus.value = '';
+    domainCheckMessage.value = '';
     load();
   } catch (e) {
     createError.value = e.message || 'Create failed';
@@ -211,5 +252,25 @@ async function create() {
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-all;
+}
+.is-disabled {
+  opacity: 0.7;
+  pointer-events: none;
+}
+.domain-check {
+  margin: 0.25rem 0 0;
+  font-size: 0.8rem;
+}
+.domain-check--checking {
+  color: var(--text-muted);
+}
+.domain-check--ok {
+  color: var(--success);
+}
+.domain-check--warn {
+  color: #eab308;
+}
+.domain-check--error {
+  color: var(--danger);
 }
 </style>
