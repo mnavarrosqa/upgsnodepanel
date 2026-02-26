@@ -32,179 +32,220 @@
         </div>
       </header>
 
-      <section class="card card--access">
-        <h2 class="card__title">Access</h2>
-        <div class="access-list">
-          <div v-if="app.domain" class="access-row">
-            <span class="access-label">Domain</span>
-            <a :href="(app.ssl_active || app.ssl_enabled) ? `https://${app.domain}` : `http://${app.domain}`" target="_blank" rel="noopener" class="access-url">
-              {{ (app.ssl_active || app.ssl_enabled) ? 'https' : 'http' }}://{{ app.domain }}
-            </a>
-            <span v-if="app.ssl_active" class="badge badge-success">SSL ✓</span>
-            <span v-else-if="app.ssl_enabled" class="badge badge-warn">SSL pending</span>
-          </div>
-          <div v-if="serverIp" class="access-row">
-            <span class="access-label">Direct (IP:port)</span>
-            <a :href="`http://${serverIp}:${app.port}`" target="_blank" rel="noopener" class="access-url">{{ serverIp }}:{{ app.port }}</a>
-          </div>
-          <p v-if="!app.domain && serverIp" class="card__muted" style="margin:0.5rem 0 0;">Set a domain in Edit to use a friendly URL.</p>
-        </div>
-      </section>
-      <section class="card card--size">
-        <h2 class="card__title">Size</h2>
-        <p class="card__muted">Disk space used by this app’s directory (source, dependencies, build output).</p>
-        <div class="access-list">
-          <div class="access-row">
-            <span class="access-label">Total</span>
-            <span class="access-url">{{ formatSize(app.size) }}</span>
-          </div>
-          <div v-if="app.size != null" class="access-row">
-            <span class="access-label">Bytes</span>
-            <span class="access-url">{{ app.size.toLocaleString() }}</span>
-          </div>
-          <p v-if="app.size == null" class="card__muted" style="margin:0.5rem 0 0;">App directory not created yet.</p>
-        </div>
-      </section>
-      <section class="card card--files">
-        <h2 class="card__title">File explorer</h2>
-        <p class="card__muted">Browse and manage files in this app’s directory. Text files under 512 KB can be viewed and edited.</p>
-        <div v-if="app.size == null" class="card__muted">App directory not created yet. Create or deploy the app first.</div>
-        <template v-else>
-          <div class="files-toolbar">
-            <nav class="files-breadcrumb" aria-label="Current folder">
-              <button type="button" class="files-breadcrumb__item" @click="fileExplorerPath = ''; loadFileList();">App root</button>
-              <template v-for="(part, i) in fileExplorerBreadcrumb" :key="i">
-                <span class="files-breadcrumb__sep">/</span>
-                <button type="button" class="files-breadcrumb__item" @click="navigateToBreadcrumb(i)">{{ part }}</button>
-              </template>
-            </nav>
-            <div class="files-actions">
-              <button type="button" class="btn btn-sm" @click="openNewFileModal" :disabled="filesBusy">New file</button>
-              <button type="button" class="btn btn-sm" @click="openNewFolderModal" :disabled="filesBusy">New folder</button>
-              <button type="button" class="btn btn-sm" @click="loadFileList()" :disabled="filesBusy">Refresh</button>
+      <nav class="detail-tabs" role="tablist" aria-label="App sections">
+        <button
+          v-for="tab in detailTabs"
+          :key="tab.id"
+          type="button"
+          role="tab"
+          :aria-selected="activeTab === tab.id"
+          :class="['detail-tabs__tab', { 'detail-tabs__tab--active': activeTab === tab.id }]"
+          @click="switchTab(tab.id)"
+        >
+          {{ tab.label }}
+          <span v-if="getTabDirty(tab.id)" class="detail-tabs__dot" title="Unsaved changes">•</span>
+        </button>
+      </nav>
+
+      <div v-show="activeTab === 'overview'" class="detail-tab-panel" role="tabpanel">
+        <section class="card card--access">
+          <h2 class="card__title">Access</h2>
+          <div class="access-list">
+            <div v-if="app.domain" class="access-row">
+              <span class="access-label">Domain</span>
+              <a :href="(app.ssl_active || app.ssl_enabled) ? `https://${app.domain}` : `http://${app.domain}`" target="_blank" rel="noopener" class="access-url">
+                {{ (app.ssl_active || app.ssl_enabled) ? 'https' : 'http' }}://{{ app.domain }}
+              </a>
+              <span v-if="app.ssl_active" class="badge badge-success">SSL ✓</span>
+              <span v-else-if="app.ssl_enabled" class="badge badge-warn">SSL pending</span>
             </div>
-          </div>
-          <p v-if="fileExplorerError" class="card__error">{{ fileExplorerError }}</p>
-          <div v-else-if="filesBusy && !fileExplorerEntries.length" class="card__muted">Loading…</div>
-          <div v-else class="table-wrap">
-            <table class="files-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Size</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="entry in fileExplorerEntries" :key="entry.path" class="files-table__row">
-                  <td>
-                    <button v-if="entry.isDirectory" type="button" class="files-table__link" @click="navigateInto(entry)">
-                      <span class="files-table__icon" aria-hidden="true">📁</span>
-                      {{ entry.name }}
-                    </button>
-                    <span v-else class="files-table__name">
-                      <span class="files-table__icon" aria-hidden="true">📄</span>
-                      {{ entry.name }}
-                    </span>
-                  </td>
-                  <td>{{ entry.isDirectory ? '—' : formatSize(entry.size) }}</td>
-                  <td>
-                    <template v-if="entry.isDirectory">
-                      <button type="button" class="btn btn-sm" @click="navigateInto(entry)">Open</button>
-                      <button type="button" class="btn btn-sm btn-danger" @click="confirmDeleteFile(entry)" :disabled="filesBusy">Delete</button>
-                    </template>
-                    <template v-else>
-                      <button type="button" class="btn btn-sm" @click="openViewFile(entry)" :disabled="filesBusy">View</button>
-                      <button type="button" class="btn btn-sm" @click="openEditFile(entry)" :disabled="filesBusy">Edit</button>
-                      <button type="button" class="btn btn-sm btn-danger" @click="confirmDeleteFile(entry)" :disabled="filesBusy">Delete</button>
-                    </template>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <p v-if="!filesBusy && fileExplorerEntries.length === 0" class="card__muted">This folder is empty.</p>
-        </template>
-      </section>
-      <section class="card card--edit">
-        <h2 class="card__title">Edit</h2>
-        <form @submit.prevent="save" class="edit-form">
-          <fieldset :disabled="saving">
-            <div class="form-group">
-              <label>Domain</label>
-              <div class="domain-row">
-                <input v-model="edit.domain" type="text" placeholder="app.example.com" class="domain-row__input" />
-                <label class="domain-row__ssl">
-                  <input v-model="edit.ssl_enabled" type="checkbox" />
-                  <span>SSL</span>
-                </label>
-              </div>
+            <div v-if="serverIp" class="access-row">
+              <span class="access-label">Direct (IP:port)</span>
+              <a :href="`http://${serverIp}:${app.port}`" target="_blank" rel="noopener" class="access-url">{{ serverIp }}:{{ app.port }}</a>
             </div>
-            <div v-if="!isUploadApp" class="form-group">
-              <label>Branch</label>
-              <input v-model="edit.branch" type="text" placeholder="main or leave empty" />
+            <p v-if="!app.domain && serverIp" class="card__muted" style="margin:0.5rem 0 0;">Set a domain in App config to use a friendly URL.</p>
+          </div>
+        </section>
+        <section class="card card--size">
+          <h2 class="card__title">Size</h2>
+          <p class="card__muted">Disk space used by this app’s directory (source, dependencies, build output).</p>
+          <div class="access-list">
+            <div class="access-row">
+              <span class="access-label">Total</span>
+              <span class="access-url">{{ formatSize(app.size) }}</span>
             </div>
-            <div class="form-row form-row--3">
+            <div v-if="app.size != null" class="access-row">
+              <span class="access-label">Bytes</span>
+              <span class="access-url">{{ app.size.toLocaleString() }}</span>
+            </div>
+            <p v-if="app.size == null" class="card__muted" style="margin:0.5rem 0 0;">App directory not created yet.</p>
+          </div>
+        </section>
+      </div>
+
+      <div v-show="activeTab === 'config'" class="detail-tab-panel" role="tabpanel">
+        <section class="card card--edit">
+          <h2 class="card__title">Edit</h2>
+          <form @submit.prevent="save" class="edit-form">
+            <fieldset :disabled="saving">
               <div class="form-group">
-                <label>Node version</label>
-                <select v-if="nodeVersionOptions.length" v-model="edit.node_version">
-                  <option v-for="v in nodeVersionOptions" :key="v" :value="v">{{ v }}</option>
-                </select>
-                <span v-else class="form-static">{{ app.node_version || '—' }}</span>
+                <label>Domain</label>
+                <div class="domain-row">
+                  <input v-model="edit.domain" type="text" placeholder="app.example.com" class="domain-row__input" />
+                  <label class="domain-row__ssl">
+                    <input v-model="edit.ssl_enabled" type="checkbox" />
+                    <span>SSL</span>
+                  </label>
+                </div>
+              </div>
+              <div v-if="!isUploadApp" class="form-group">
+                <label>Branch</label>
+                <input v-model="edit.branch" type="text" placeholder="main or leave empty" />
+              </div>
+              <div class="form-row form-row--3">
+                <div class="form-group">
+                  <label>Node version</label>
+                  <select v-if="nodeVersionOptions.length" v-model="edit.node_version">
+                    <option v-for="v in nodeVersionOptions" :key="v" :value="v">{{ v }}</option>
+                  </select>
+                  <span v-else class="form-static">{{ app.node_version || '—' }}</span>
+                </div>
+                <div class="form-group">
+                  <label>Install command</label>
+                  <input v-model="edit.install_cmd" type="text" placeholder="npm install" />
+                </div>
+                <div class="form-group">
+                  <label>Build command</label>
+                  <input v-model="edit.build_cmd" type="text" placeholder="npm run build" />
+                </div>
               </div>
               <div class="form-group">
-                <label>Install command</label>
-                <input v-model="edit.install_cmd" type="text" placeholder="npm install" />
+                <label>Start command</label>
+                <input v-model="edit.start_cmd" type="text" placeholder="npm start" />
               </div>
-              <div class="form-group">
-                <label>Build command</label>
-                <input v-model="edit.build_cmd" type="text" placeholder="npm run build" />
-              </div>
-            </div>
-            <div class="form-group">
-              <label>Start command</label>
-              <input v-model="edit.start_cmd" type="text" placeholder="npm start" />
-            </div>
-            <button type="submit" class="btn btn-primary" :disabled="saving">Save</button>
-          </fieldset>
-        </form>
-      </section>
-      <section v-if="!isUploadApp" class="card">
-        <h2 class="card__title">Update from repo</h2>
-        <p class="card__muted">Pull latest from the repo. Save first if you changed the branch above. Redeploy also runs install, build, and restart.</p>
-        <div class="action-btns">
-          <button type="button" class="btn" @click="doPull" :disabled="busyPull || busyRedeploy || saving">{{ busyPull ? 'Pulling…' : 'Update from repo' }}</button>
-          <button type="button" class="btn btn-primary" @click="doRedeploy" :disabled="busyPull || busyRedeploy || saving">{{ busyRedeploy ? 'Redeploying…' : 'Redeploy' }}</button>
-        </div>
-      </section>
-      <section class="card">
-        <h2 class="card__title">Run commands</h2>
-        <p class="card__muted">Re-run install or build in the app directory. Use after changing commands above.</p>
-        <div class="action-btns">
-          <button type="button" class="btn" @click="runInstall" :disabled="busy || saving">{{ busyInstall ? 'Running…' : 'Run install' }}</button>
-          <button type="button" class="btn" @click="runBuild" :disabled="busy || saving">{{ busyBuild ? 'Running…' : 'Run build' }}</button>
-        </div>
-      </section>
-      <section class="card">
-        <h2 class="card__title">Environment (.env)</h2>
-        <p class="card__muted">Variables for this app. Restart the app for changes to take effect.</p>
-        <textarea v-model="envContent" class="env-editor" placeholder="NODE_ENV=production&#10;PORT=3000" rows="10" spellcheck="false" :disabled="saving" />
-        <div class="action-btns">
-          <button type="button" class="btn btn-primary" @click="saveEnv" :disabled="savingEnv || saving">Save .env</button>
-          <button type="button" class="btn" @click="loadEnv" :disabled="saving">Reload</button>
-        </div>
-        <p v-if="envError" class="card__error">{{ envError }}</p>
-      </section>
-      <section class="card card--logs">
-        <div class="logs-header">
-          <h2 class="card__title">Logs</h2>
-          <div class="logs-actions">
-            <button type="button" class="btn btn-sm" @click="copyLogs" :disabled="!logs">Copy</button>
-            <button type="button" class="btn btn-sm" @click="loadLogs" :disabled="saving">Refresh</button>
+              <button type="submit" class="btn btn-primary" :disabled="saving">Save</button>
+            </fieldset>
+          </form>
+        </section>
+        <section v-if="!isUploadApp" class="card">
+          <h2 class="card__title">Update from repo</h2>
+          <p class="card__muted">Pull latest from the repo. Save first if you changed the branch above. Redeploy also runs install, build, and restart.</p>
+          <div class="action-btns">
+            <button type="button" class="btn" @click="doPull" :disabled="busyPull || busyRedeploy || saving">{{ busyPull ? 'Pulling…' : 'Update from repo' }}</button>
+            <button type="button" class="btn btn-primary" @click="doRedeploy" :disabled="busyPull || busyRedeploy || saving">{{ busyRedeploy ? 'Redeploying…' : 'Redeploy' }}</button>
           </div>
+        </section>
+        <section class="card">
+          <h2 class="card__title">Run commands</h2>
+          <p class="card__muted">Re-run install or build in the app directory. Use after changing commands above.</p>
+          <div class="action-btns">
+            <button type="button" class="btn" @click="runInstall" :disabled="busy || saving">{{ busyInstall ? 'Running…' : 'Run install' }}</button>
+            <button type="button" class="btn" @click="runBuild" :disabled="busy || saving">{{ busyBuild ? 'Running…' : 'Run build' }}</button>
+          </div>
+        </section>
+      </div>
+
+      <div v-show="activeTab === 'files'" class="detail-tab-panel" role="tabpanel">
+        <section class="card card--files">
+          <h2 class="card__title">File explorer</h2>
+          <p class="card__muted">Browse and manage files in this app’s directory. Text files under 512 KB can be viewed and edited.</p>
+          <div v-if="app.size == null" class="card__muted">App directory not created yet. Create or deploy the app first.</div>
+          <template v-else>
+            <div class="files-toolbar">
+              <nav class="files-breadcrumb" aria-label="Current folder">
+                <button type="button" class="files-breadcrumb__item" @click="fileExplorerPath = ''; loadFileList();">App root</button>
+                <template v-for="(part, i) in fileExplorerBreadcrumb" :key="i">
+                  <span class="files-breadcrumb__sep">/</span>
+                  <button type="button" class="files-breadcrumb__item" @click="navigateToBreadcrumb(i)">{{ part }}</button>
+                </template>
+              </nav>
+              <div class="files-actions">
+                <button type="button" class="btn btn-sm" @click="openNewFileModal" :disabled="filesBusy">New file</button>
+                <button type="button" class="btn btn-sm" @click="openNewFolderModal" :disabled="filesBusy">New folder</button>
+                <button type="button" class="btn btn-sm" @click="loadFileList()" :disabled="filesBusy">Refresh</button>
+              </div>
+            </div>
+            <p v-if="fileExplorerError" class="card__error">{{ fileExplorerError }}</p>
+            <div v-else-if="filesBusy && !fileExplorerEntries.length" class="card__muted">Loading…</div>
+            <div v-else class="table-wrap">
+              <table class="files-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Size</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="entry in fileExplorerEntries" :key="entry.path" class="files-table__row">
+                    <td>
+                      <button v-if="entry.isDirectory" type="button" class="files-table__link" @click="navigateInto(entry)">
+                        <span class="files-table__icon" aria-hidden="true">📁</span>
+                        {{ entry.name }}
+                      </button>
+                      <span v-else class="files-table__name">
+                        <span class="files-table__icon" aria-hidden="true">📄</span>
+                        {{ entry.name }}
+                      </span>
+                    </td>
+                    <td>{{ entry.isDirectory ? '—' : formatSize(entry.size) }}</td>
+                    <td>
+                      <template v-if="entry.isDirectory">
+                        <button type="button" class="btn btn-sm" @click="navigateInto(entry)">Open</button>
+                        <button type="button" class="btn btn-sm btn-danger" @click="confirmDeleteFile(entry)" :disabled="filesBusy">Delete</button>
+                      </template>
+                      <template v-else>
+                        <button type="button" class="btn btn-sm" @click="openViewFile(entry)" :disabled="filesBusy">View</button>
+                        <button type="button" class="btn btn-sm" @click="openEditFile(entry)" :disabled="filesBusy">Edit</button>
+                        <button type="button" class="btn btn-sm btn-danger" @click="confirmDeleteFile(entry)" :disabled="filesBusy">Delete</button>
+                      </template>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p v-if="!filesBusy && fileExplorerEntries.length === 0" class="card__muted">This folder is empty.</p>
+          </template>
+        </section>
+      </div>
+
+      <div v-show="activeTab === 'env'" class="detail-tab-panel" role="tabpanel">
+        <section class="card">
+          <h2 class="card__title">Environment (.env)</h2>
+          <p class="card__muted">Variables for this app. Restart the app for changes to take effect.</p>
+          <textarea v-model="envContent" class="env-editor" placeholder="NODE_ENV=production&#10;PORT=3000" rows="10" spellcheck="false" :disabled="saving" />
+          <div class="action-btns">
+            <button type="button" class="btn btn-primary" @click="saveEnv" :disabled="savingEnv || saving">Save .env</button>
+            <button type="button" class="btn" @click="loadEnv" :disabled="saving">Reload</button>
+          </div>
+          <p v-if="envError" class="card__error">{{ envError }}</p>
+        </section>
+      </div>
+
+      <div v-show="activeTab === 'logs'" class="detail-tab-panel" role="tabpanel">
+        <section class="card card--logs">
+          <div class="logs-header">
+            <h2 class="card__title">Logs</h2>
+            <div class="logs-actions">
+              <button type="button" class="btn btn-sm" @click="copyLogs" :disabled="!logs">Copy</button>
+              <button type="button" class="btn btn-sm" @click="loadLogs" :disabled="saving">Refresh</button>
+            </div>
+          </div>
+          <pre ref="logsPre" class="logs">{{ logs }}</pre>
+        </section>
+      </div>
+    </div>
+
+    <div v-if="showUnsavedModal" class="modal-overlay" @click.self="cancelUnsavedSwitch">
+      <div class="confirm-dialog">
+        <h3 class="confirm-dialog__title">Unsaved changes</h3>
+        <p class="confirm-dialog__message">You have unsaved changes in <strong>{{ unsavedModalTabLabel }}</strong>. Save changes or discard before switching tab?</p>
+        <div class="confirm-dialog__actions">
+          <button type="button" class="btn" @click="cancelUnsavedSwitch">Cancel</button>
+          <button type="button" class="btn" @click="discardAndSwitchTab">Discard</button>
+          <button type="button" class="btn btn-primary" @click="saveAndSwitchTab">Save</button>
         </div>
-        <pre ref="logsPre" class="logs">{{ logs }}</pre>
-      </section>
+      </div>
     </div>
     <div v-if="fileExplorerModal === 'view' || fileExplorerModal === 'edit'" class="modal-overlay" @click.self="closeFileModal">
       <div class="modal modal--file">
@@ -319,10 +360,87 @@ const fileExplorerContent = ref('');
 const fileExplorerContentError = ref('');
 const fileExplorerNewName = ref('');
 const fileExplorerNewContent = ref('');
+const fileExplorerContentOriginal = ref('');
 const fileExplorerBreadcrumb = computed(() => {
   const p = (fileExplorerPath.value || '').trim();
   return p ? p.split('/').filter(Boolean) : [];
 });
+
+const activeTab = ref('overview');
+const pendingTab = ref(null);
+const showUnsavedModal = ref(false);
+const editBaseline = ref(null);
+const lastLoadedEnvContent = ref('');
+
+const detailTabs = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'config', label: 'App config' },
+  { id: 'files', label: 'File explorer' },
+  { id: 'env', label: 'Env' },
+  { id: 'logs', label: 'Logs' },
+];
+
+function getTabDirty(tabId) {
+  if (tabId === 'config') {
+    if (editBaseline.value == null) return false;
+    const e = edit.value;
+    const b = editBaseline.value;
+    return e.domain !== b.domain || e.ssl_enabled !== b.ssl_enabled || e.branch !== b.branch ||
+      e.node_version !== b.node_version || e.install_cmd !== b.install_cmd || e.build_cmd !== b.build_cmd || e.start_cmd !== b.start_cmd;
+  }
+  if (tabId === 'env') return envContent.value !== lastLoadedEnvContent.value;
+  if (tabId === 'files') return fileExplorerModal.value === 'edit' && fileExplorerContent.value !== fileExplorerContentOriginal.value;
+  return false;
+}
+
+const unsavedModalTabLabel = computed(() => {
+  const t = detailTabs.find((tab) => tab.id === activeTab.value);
+  return t ? t.label : '';
+});
+
+function switchTab(tabId) {
+  if (activeTab.value === tabId) return;
+  if (getTabDirty(activeTab.value)) {
+    pendingTab.value = tabId;
+    showUnsavedModal.value = true;
+    return;
+  }
+  activeTab.value = tabId;
+}
+
+function cancelUnsavedSwitch() {
+  showUnsavedModal.value = false;
+  pendingTab.value = null;
+}
+
+function discardAndSwitchTab() {
+  if (activeTab.value === 'config') {
+    if (editBaseline.value != null) edit.value = { ...editBaseline.value };
+  } else if (activeTab.value === 'env') {
+    envContent.value = lastLoadedEnvContent.value;
+  } else if (activeTab.value === 'files') {
+    closeFileModal();
+  }
+  activeTab.value = pendingTab.value;
+  showUnsavedModal.value = false;
+  pendingTab.value = null;
+}
+
+async function saveAndSwitchTab() {
+  const tab = activeTab.value;
+  if (tab === 'config') {
+    await save();
+  } else if (tab === 'env') {
+    await saveEnv();
+  } else if (tab === 'files') {
+    await saveFileContent();
+  }
+  if (!getTabDirty(tab)) {
+    activeTab.value = pendingTab.value;
+    showUnsavedModal.value = false;
+    pendingTab.value = null;
+  }
+}
 
 function formatSize(bytes) {
   if (bytes == null) return '—';
@@ -352,10 +470,13 @@ async function loadEnv() {
   envError.value = '';
   try {
     const data = await api.apps.env(route.params.id);
-    envContent.value = data.env != null ? String(data.env) : '';
+    const content = data.env != null ? String(data.env) : '';
+    envContent.value = content;
+    lastLoadedEnvContent.value = content;
     setFeedback('success', '.env loaded.');
   } catch (e) {
     envContent.value = '';
+    lastLoadedEnvContent.value = '';
     envError.value = e.message || 'Failed to load .env';
     setFeedback('error', e.message || 'Failed to load .env');
   }
@@ -366,6 +487,7 @@ async function saveEnv() {
   envError.value = '';
   try {
     await api.apps.updateEnv(route.params.id, envContent.value);
+    lastLoadedEnvContent.value = envContent.value;
     setFeedback('success', '.env saved.');
   } catch (e) {
     envError.value = e.message || 'Failed to save .env';
@@ -395,8 +517,10 @@ async function load() {
       build_cmd: appRes.build_cmd || '',
       start_cmd: appRes.start_cmd || '',
     };
+    editBaseline.value = { ...edit.value };
   } catch (e) {
     app.value = null;
+    editBaseline.value = null;
     loadError.value = e.message || 'Failed to load app';
   }
 }
@@ -478,10 +602,13 @@ async function openEditFile(entry) {
   fileExplorerSelected.value = entry;
   fileExplorerContentError.value = '';
   fileExplorerModal.value = 'edit';
+  fileExplorerContentOriginal.value = '';
   filesBusy.value = true;
   try {
     const data = await api.apps.files.getContent(route.params.id, entry.path);
-    fileExplorerContent.value = data.content ?? '';
+    const content = data.content ?? '';
+    fileExplorerContent.value = content;
+    fileExplorerContentOriginal.value = content;
   } catch (e) {
     fileExplorerContentError.value = e.message || 'Failed to load file';
     fileExplorerContent.value = '';
@@ -496,6 +623,7 @@ async function saveFileContent() {
   filesBusy.value = true;
   try {
     await api.apps.files.setContent(route.params.id, fileExplorerSelected.value.path, fileExplorerContent.value);
+    fileExplorerContentOriginal.value = fileExplorerContent.value;
     setFeedback('success', 'File saved.');
     closeFileModal();
   } catch (e) {
@@ -568,6 +696,9 @@ onMounted(() => {
 });
 
 watch(() => route.params.id, () => {
+  activeTab.value = 'overview';
+  pendingTab.value = null;
+  showUnsavedModal.value = false;
   load();
   loadEnv();
   loadLogs();
@@ -622,6 +753,7 @@ async function save() {
       build_cmd: updated.build_cmd || '',
       start_cmd: updated.start_cmd || '',
     };
+    editBaseline.value = { ...edit.value };
     setFeedback('success', 'Settings saved.');
   } catch (e) {
     setFeedback('error', e.message || 'Save failed.');
@@ -871,6 +1003,46 @@ async function doDelete() {
 }
 .edit-form .form-row {
   margin-bottom: 1rem;
+}
+.detail-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-bottom: 1.25rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0;
+}
+.detail-tabs__tab {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  border: none;
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.detail-tabs__tab:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+.detail-tabs__tab.detail-tabs__tab--active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  background: var(--bg-card);
+}
+.detail-tabs__dot {
+  color: var(--warn);
+  font-weight: bold;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+.detail-tab-panel {
+  min-height: 0;
 }
 .logs-header {
   display: flex;
