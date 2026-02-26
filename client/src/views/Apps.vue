@@ -81,10 +81,21 @@
       </form>
       <p v-if="createError" style="margin-top:0.5rem; color:var(--danger);">{{ createError }}</p>
     </div>
-    <div v-if="creating" class="card creation-progress">
-      <h3 style="margin:0 0 0.5rem; font-size:1rem;">Creating app…</h3>
-      <p style="margin:0 0 0.5rem; font-size:0.875rem; color:var(--text-muted);">{{ creationStep }}</p>
-      <pre class="creation-logs">{{ creationLogs }}</pre>
+    <div v-if="creating || creationDone" class="creation-overlay" @click.self="closeCreationOverlay">
+      <div class="creation-modal card">
+        <div v-if="creating" class="creation-progress">
+          <h3 style="margin:0 0 0.5rem; font-size:1rem;">Creating app…</h3>
+          <p style="margin:0 0 0.5rem; font-size:0.875rem; color:var(--text-muted);">{{ creationStep }}</p>
+          <pre class="creation-logs">{{ creationLogs }}</pre>
+        </div>
+        <div v-else class="creation-done">
+          <h3 style="margin:0 0 0.5rem; font-size:1rem;">{{ createError ? 'Creation failed' : 'App created' }}</h3>
+          <p v-if="createError" style="margin:0 0 1rem; font-size:0.875rem; color:var(--danger);">{{ createError }}</p>
+          <p v-else style="margin:0 0 1rem; font-size:0.875rem; color:var(--text-muted);">The app is running. You can open it from the list below.</p>
+          <pre v-if="creationLogs && (createError || creationStep)" class="creation-logs">{{ creationStep }}\n{{ creationLogs }}</pre>
+          <button type="button" class="btn btn-primary" @click="closeCreationOverlay" style="margin-top:1rem;">Close</button>
+        </div>
+      </div>
     </div>
     <p v-if="loadError" style="color:var(--danger); margin-bottom:1rem;">{{ loadError }}</p>
     <div class="card" :class="{ 'is-disabled': creating }">
@@ -128,6 +139,7 @@ import { api } from '../api';
 const apps = ref([]);
 const showForm = ref(false);
 const creating = ref(false);
+const creationDone = ref(false);
 const createError = ref('');
 const creationStep = ref('');
 const creationLogs = ref('');
@@ -254,23 +266,53 @@ async function create() {
     });
     showForm.value = false;
     form.value = { name: '', repo_url: '', branch: '', node_version: nodeVersions.value[0] || '20', install_cmd: 'npm install', build_cmd: '', start_cmd: 'npm start', domain: '', ssl_enabled: false };
-    creationStep.value = '';
-    creationLogs.value = '';
     domainCheckStatus.value = '';
     domainCheckMessage.value = '';
     branchDetected.value = '';
     load();
+    creationDone.value = true;
   } catch (e) {
     createError.value = e.message || 'Create failed';
+    creationDone.value = true;
   } finally {
     creating.value = false;
   }
 }
+
+function closeCreationOverlay() {
+  creationDone.value = false;
+  creationStep.value = '';
+  creationLogs.value = '';
+  createError.value = '';
+}
 </script>
 
 <style scoped>
+.creation-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 1rem;
+}
+.creation-modal {
+  width: 100%;
+  max-width: 560px;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
 .creation-progress {
-  margin-top: 1rem;
+  flex: 1;
+  min-height: 0;
+}
+.creation-done {
+  flex: 1;
+  min-height: 0;
 }
 .creation-logs {
   margin: 0;

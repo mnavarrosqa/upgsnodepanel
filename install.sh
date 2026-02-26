@@ -5,7 +5,7 @@ set -e
 INSTALL_DIR="${INSTALL_DIR:-/opt/upgs-node-panel}"
 PANEL_PORT="${PANEL_PORT:-3000}"
 APPS_BASE_PATH="${APPS_BASE_PATH:-/var/www/upgs-node-apps}"
-NGINX_APPS_CONF_DIR="${NGINX_APPS_CONF_DIR:-/etc/nginx/conf.d/upgs-node-apps}"
+NGINX_APPS_CONF_DIR="${NGINX_APPS_CONF_DIR:-/etc/nginx/conf.d}"
 NVM_DIR="${NVM_DIR:-/root/.nvm}"
 PM2_HOME="${PM2_HOME:-/root/.pm2}"
 
@@ -171,7 +171,7 @@ fi
 
 echo "[*] Creating directories..."
 mkdir -p "$APPS_BASE_PATH"
-mkdir -p "$NGINX_APPS_CONF_DIR"
+# App vhosts are written as upgs-node-app-{id}.conf into NGINX_APPS_CONF_DIR (conf.d); no subdir needed
 
 echo "[*] Installing systemd unit..."
 cp packaging/upgs-node-panel.service /etc/systemd/system/

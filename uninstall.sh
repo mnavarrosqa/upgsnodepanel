@@ -3,7 +3,7 @@
 set -e
 
 INSTALL_DIR="${INSTALL_DIR:-/opt/upgs-node-panel}"
-NGINX_APPS_CONF_DIR="${NGINX_APPS_CONF_DIR:-/etc/nginx/conf.d/upgs-node-apps}"
+NGINX_APPS_CONF_DIR="${NGINX_APPS_CONF_DIR:-/etc/nginx/conf.d}"
 
 if [ "$(id -u)" -ne 0 ]; then
   echo "Run as root or with sudo."
@@ -26,7 +26,7 @@ systemctl daemon-reload
 
 echo "[*] Removing nginx config..."
 rm -f /etc/nginx/conf.d/upgs-panel.conf
-rm -rf "$NGINX_APPS_CONF_DIR"
+rm -f "$NGINX_APPS_CONF_DIR"/upgs-node-app-*.conf
 nginx -t && nginx -s reload 2>/dev/null || true
 
 echo "[*] Removing install directory..."

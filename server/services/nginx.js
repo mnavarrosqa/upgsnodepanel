@@ -2,7 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import { run } from '../lib/exec.js';
 
-const NGINX_APPS_DIR = process.env.NGINX_APPS_CONF_DIR || '/etc/nginx/conf.d/upgs-node-apps';
+// Must be a directory that nginx includes (e.g. conf.d). Files are named upgs-node-app-{id}.conf.
+const NGINX_APPS_DIR = process.env.NGINX_APPS_CONF_DIR || '/etc/nginx/conf.d';
 const NGINX_BIN = process.env.NGINX_BIN || '/usr/sbin/nginx';
 const LETSENCRYPT_BASE = '/etc/letsencrypt/live';
 
@@ -12,6 +13,10 @@ function ensureDir() {
   } catch (e) {
     console.warn('Could not create nginx apps dir:', e.message);
   }
+}
+
+function appConfPath(id) {
+  return path.join(NGINX_APPS_DIR, `upgs-node-app-${id}.conf`);
 }
 
 function certPath(domain) {
@@ -25,7 +30,7 @@ function keyPath(domain) {
 export function writeAppConfig(app) {
   ensureDir();
   const { id, domain, port, ssl_enabled } = app;
-  const confPath = path.join(NGINX_APPS_DIR, `app-${id}.conf`);
+  const confPath = appConfPath(id);
   if (!domain) {
     if (fs.existsSync(confPath)) fs.unlinkSync(confPath);
     return;
@@ -79,7 +84,7 @@ server {
 }
 
 export function removeAppConfig(id) {
-  const confPath = path.join(NGINX_APPS_DIR, `app-${id}.conf`);
+  const confPath = appConfPath(id);
   try {
     if (fs.existsSync(confPath)) fs.unlinkSync(confPath);
   } catch (e) {
