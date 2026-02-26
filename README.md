@@ -74,6 +74,22 @@ sudo ./install.sh
 
 The installer will use the local copy if run from the repo; otherwise it clones from the repo above. Full steps: deps, nvm, PM2, panel code, nginx, systemd.
 
+## Updating the panel
+
+To pull the latest code from the main repo and restart the panel (run as root or with sudo):
+
+```bash
+sudo ./update.sh
+```
+
+Or from anywhere, if the repo is installed in the default location:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/mnavarrosqa/upgsnodepanel/main/update.sh | sudo bash
+```
+
+Override install path or repo with env: `INSTALL_DIR=/opt/upgs-node-panel REPO_URL=... sudo ./update.sh`. Your `.env` is preserved.
+
 ## API (authenticated except login)
 
 - `POST /api/login` — body: `{ username, password }`
@@ -82,6 +98,8 @@ The installer will use the local copy if run from the repo; otherwise it clones 
 - `GET /api/node/versions` — list Node versions
 - `POST /api/node/versions` — body: `{ version }` (e.g. "20", "lts")
 - `GET/POST/PUT/DELETE /api/apps` — CRUD apps
+- `GET /api/apps/:id/env` — get app `.env` file content
+- `PUT /api/apps/:id/env` — body: `{ env: "string" }` — set app `.env` (restart app for changes to take effect)
 - `POST /api/apps/:id/start|stop|restart` — PM2 control
 - `GET /api/apps/:id/logs` — PM2 logs
 - `GET /api/system/ip` — server public IP

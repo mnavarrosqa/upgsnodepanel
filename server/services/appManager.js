@@ -123,4 +123,25 @@ export function teardownNginx(app) {
   reloadNginx();
 }
 
+export function getAppEnvPath(app) {
+  return path.join(appDir(app), '.env');
+}
+
+export function readAppEnv(app) {
+  const envPath = getAppEnvPath(app);
+  try {
+    if (fs.existsSync(envPath)) {
+      return fs.readFileSync(envPath, 'utf8');
+    }
+  } catch (_) {}
+  return '';
+}
+
+export function writeAppEnv(app, content) {
+  const envPath = getAppEnvPath(app);
+  const dir = path.dirname(envPath);
+  if (!fs.existsSync(dir)) throw new Error('App directory not found');
+  fs.writeFileSync(envPath, typeof content === 'string' ? content : '', 'utf8');
+}
+
 export { appDir, pm2Name };

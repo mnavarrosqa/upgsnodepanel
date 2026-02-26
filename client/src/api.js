@@ -50,6 +50,8 @@ export const api = {
     install: (id) => request(`/api/apps/${id}/install`, { method: 'POST' }),
     build: (id) => request(`/api/apps/${id}/build`, { method: 'POST' }),
     logs: (id, lines) => request(`/api/apps/${id}/logs?lines=${lines || 100}`),
+    env: (id) => request(`/api/apps/${id}/env`),
+    updateEnv: (id, env) => request(`/api/apps/${id}/env`, { method: 'PUT', body: JSON.stringify({ env }) }),
   },
   system: {
     ip: () => request('/api/system/ip'),

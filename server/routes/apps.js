@@ -187,3 +187,26 @@ appsRouter.get('/:id/logs', (req, res, next) => {
     next(e);
   }
 });
+
+appsRouter.get('/:id/env', (req, res, next) => {
+  try {
+    const app = db.getApp(req.params.id);
+    if (!app) return res.status(404).json({ error: 'App not found' });
+    const env = appManager.readAppEnv(app);
+    res.json({ env });
+  } catch (e) {
+    next(e);
+  }
+});
+
+appsRouter.put('/:id/env', (req, res, next) => {
+  try {
+    const app = db.getApp(req.params.id);
+    if (!app) return res.status(404).json({ error: 'App not found' });
+    const content = req.body && typeof req.body.env === 'string' ? req.body.env : '';
+    appManager.writeAppEnv(app, content);
+    res.json({ ok: true });
+  } catch (e) {
+    next(e);
+  }
+});

@@ -75,6 +75,16 @@
       </div>
     </div>
     <div class="card">
+      <h3 style="margin:0 0 0.75rem; font-size:1rem;">Environment (.env)</h3>
+      <p style="margin:0 0 0.5rem; font-size:0.875rem; color:var(--text-muted);">Variables for this app. Restart the app for changes to take effect.</p>
+      <textarea v-model="envContent" class="env-editor" placeholder="NODE_ENV=production&#10;PORT=3000" rows="10" spellcheck="false" />
+      <div class="action-btns" style="margin-top:0.5rem;">
+        <button type="button" class="btn btn-primary" @click="saveEnv" :disabled="savingEnv">Save .env</button>
+        <button type="button" class="btn" @click="loadEnv">Reload</button>
+      </div>
+      <p v-if="envError" style="margin:0.5rem 0 0; font-size:0.875rem; color:var(--danger);">{{ envError }}</p>
+    </div>
+    <div class="card">
       <h3 style="margin:0 0 0.75rem; font-size:1rem;">Logs</h3>
       <pre class="logs">{{ logs }}</pre>
       <button type="button" class="btn" @click="loadLogs" style="margin-top:0.5rem;">Refresh logs</button>
@@ -108,6 +118,32 @@ const busy = ref(false);
 const showDeleteModal = ref(false);
 const deleting = ref(false);
 const loadError = ref('');
+const envContent = ref('');
+const savingEnv = ref(false);
+const envError = ref('');
+
+async function loadEnv() {
+  envError.value = '';
+  try {
+    const data = await api.apps.env(route.params.id);
+    envContent.value = data.env != null ? String(data.env) : '';
+  } catch (e) {
+    envContent.value = '';
+    envError.value = e.message || 'Failed to load .env';
+  }
+}
+
+async function saveEnv() {
+  savingEnv.value = true;
+  envError.value = '';
+  try {
+    await api.apps.updateEnv(route.params.id, envContent.value);
+  } catch (e) {
+    envError.value = e.message || 'Failed to save .env';
+  } finally {
+    savingEnv.value = false;
+  }
+}
 
 async function load() {
   loadError.value = '';
@@ -143,9 +179,14 @@ async function loadLogs() {
 onMounted(() => {
   load();
   loadLogs();
+  loadEnv();
 });
 
-watch(() => route.params.id, load);
+watch(() => route.params.id, () => {
+  load();
+  loadEnv();
+  loadLogs();
+});
 
 async function doStart() {
   try {
@@ -219,6 +260,22 @@ async function doDelete() {
 </script>
 
 <style scoped>
+.env-editor {
+  width: 100%;
+  min-height: 160px;
+  padding: 0.75rem;
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  resize: vertical;
+}
+.env-editor:focus {
+  outline: none;
+  border-color: var(--accent);
+}
 .logs {
   background: var(--bg);
   border: 1px solid var(--border);
