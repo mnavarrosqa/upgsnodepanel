@@ -8,8 +8,10 @@ import session from 'express-session';
 import { SqliteSessionStore } from './lib/sessionStore.js';
 import { authRouter, requireAuth } from './auth.js';
 import { nodeRouter } from './routes/node.js';
+import * as db from './db.js';
 import { appsRouter } from './routes/apps.js';
 import { systemRouter } from './routes/system.js';
+import * as nginx from './services/nginx.js';
 
 process.on('uncaughtException', (err) => {
   console.error('Uncaught exception:', err);
@@ -67,6 +69,19 @@ app.use((err, req, res, next) => {
   console.error(err);
   res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
 });
+
+// On startup, write all app vhosts so domain configs are in sync (e.g. after .env path change)
+if (isProduction) {
+  try {
+    const apps = db.listApps();
+    for (const a of apps) {
+      if (a.domain) nginx.writeAppConfig(a);
+    }
+    nginx.reloadNginx();
+  } catch (e) {
+    console.warn('Nginx app config sync at startup:', e.message);
+  }
+}
 
 app.listen(PORT, () => {
   console.log(`UPGS Node Panel listening on port ${PORT}`);

@@ -37,9 +37,10 @@ export function writeAppConfig(app) {
   }
   const serverName = domain.trim();
   const hasSsl = ssl_enabled && fs.existsSync(certPath(serverName)) && fs.existsSync(keyPath(serverName));
+  const comment = `# UPGS Node Panel - app ${id} - ${serverName}\n`;
   let content = '';
   if (hasSsl) {
-    content = `
+    content = comment + `
 server {
   listen 80;
   server_name ${serverName};
@@ -63,7 +64,7 @@ server {
 }
 `;
   } else {
-    content = `
+    content = comment + `
 server {
   listen 80;
   server_name ${serverName};
