@@ -182,6 +182,13 @@ export const api = {
     logs: (id, lines) => request(`/api/apps/${id}/logs?lines=${lines || 100}`),
     env: (id) => request(`/api/apps/${id}/env`),
     updateEnv: (id, env) => request(`/api/apps/${id}/env`, { method: 'PUT', body: JSON.stringify({ env }) }),
+    files: {
+      list: (id, dirPath) => request(`/api/apps/${id}/files?path=${encodeURIComponent(dirPath || '')}`),
+      getContent: (id, filePath) => request(`/api/apps/${id}/files/content?path=${encodeURIComponent(filePath)}`),
+      setContent: (id, filePath, content) => request(`/api/apps/${id}/files/content`, { method: 'PUT', body: JSON.stringify({ path: filePath, content }) }),
+      create: (id, filePath, type, content) => request(`/api/apps/${id}/files`, { method: 'POST', body: JSON.stringify({ path: filePath, type: type || 'file', content: content || '' }) }),
+      delete: (id, filePath) => request(`/api/apps/${id}/files?path=${encodeURIComponent(filePath)}`, { method: 'DELETE' }),
+    },
   },
   system: {
     ip: () => request('/api/system/ip'),

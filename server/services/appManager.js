@@ -26,6 +26,11 @@ function appDir(app) {
   return path.join(APPS_BASE, safeName);
 }
 
+/** Returns the absolute path of the app directory (for file explorer, etc.). */
+export function getAppDir(app) {
+  return appDir(app);
+}
+
 /**
  * Recursive directory size in bytes. Uses stat (follows symlinks). Returns 0 for empty or missing dir.
  */

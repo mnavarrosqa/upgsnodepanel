@@ -65,6 +65,67 @@
           <p v-if="app.size == null" class="card__muted" style="margin:0.5rem 0 0;">App directory not created yet.</p>
         </div>
       </section>
+      <section class="card card--files">
+        <h2 class="card__title">File explorer</h2>
+        <p class="card__muted">Browse and manage files in this app’s directory. Text files under 512 KB can be viewed and edited.</p>
+        <div v-if="app.size == null" class="card__muted">App directory not created yet. Create or deploy the app first.</div>
+        <template v-else>
+          <div class="files-toolbar">
+            <nav class="files-breadcrumb" aria-label="Current folder">
+              <button type="button" class="files-breadcrumb__item" @click="fileExplorerPath = ''; loadFileList();">App root</button>
+              <template v-for="(part, i) in fileExplorerBreadcrumb" :key="i">
+                <span class="files-breadcrumb__sep">/</span>
+                <button type="button" class="files-breadcrumb__item" @click="navigateToBreadcrumb(i)">{{ part }}</button>
+              </template>
+            </nav>
+            <div class="files-actions">
+              <button type="button" class="btn btn-sm" @click="openNewFileModal" :disabled="filesBusy">New file</button>
+              <button type="button" class="btn btn-sm" @click="openNewFolderModal" :disabled="filesBusy">New folder</button>
+              <button type="button" class="btn btn-sm" @click="loadFileList()" :disabled="filesBusy">Refresh</button>
+            </div>
+          </div>
+          <p v-if="fileExplorerError" class="card__error">{{ fileExplorerError }}</p>
+          <div v-else-if="filesBusy && !fileExplorerEntries.length" class="card__muted">Loading…</div>
+          <div v-else class="table-wrap">
+            <table class="files-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Size</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="entry in fileExplorerEntries" :key="entry.path" class="files-table__row">
+                  <td>
+                    <button v-if="entry.isDirectory" type="button" class="files-table__link" @click="navigateInto(entry)">
+                      <span class="files-table__icon" aria-hidden="true">📁</span>
+                      {{ entry.name }}
+                    </button>
+                    <span v-else class="files-table__name">
+                      <span class="files-table__icon" aria-hidden="true">📄</span>
+                      {{ entry.name }}
+                    </span>
+                  </td>
+                  <td>{{ entry.isDirectory ? '—' : formatSize(entry.size) }}</td>
+                  <td>
+                    <template v-if="entry.isDirectory">
+                      <button type="button" class="btn btn-sm" @click="navigateInto(entry)">Open</button>
+                      <button type="button" class="btn btn-sm btn-danger" @click="confirmDeleteFile(entry)" :disabled="filesBusy">Delete</button>
+                    </template>
+                    <template v-else>
+                      <button type="button" class="btn btn-sm" @click="openViewFile(entry)" :disabled="filesBusy">View</button>
+                      <button type="button" class="btn btn-sm" @click="openEditFile(entry)" :disabled="filesBusy">Edit</button>
+                      <button type="button" class="btn btn-sm btn-danger" @click="confirmDeleteFile(entry)" :disabled="filesBusy">Delete</button>
+                    </template>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p v-if="!filesBusy && fileExplorerEntries.length === 0" class="card__muted">This folder is empty.</p>
+        </template>
+      </section>
       <section class="card card--edit">
         <h2 class="card__title">Edit</h2>
         <form @submit.prevent="save" class="edit-form">
@@ -145,6 +206,46 @@
         <pre ref="logsPre" class="logs">{{ logs }}</pre>
       </section>
     </div>
+    <div v-if="fileExplorerModal === 'view' || fileExplorerModal === 'edit'" class="modal-overlay" @click.self="closeFileModal">
+      <div class="modal modal--file">
+        <h3 class="modal__title">{{ fileExplorerModal === 'edit' ? 'Edit file' : 'View file' }}: {{ fileExplorerSelected && fileExplorerSelected.name }}</h3>
+        <textarea v-model="fileExplorerContent" class="modal__textarea" rows="18" spellcheck="false" :readonly="fileExplorerModal === 'view'" />
+        <p v-if="fileExplorerContentError" class="card__error">{{ fileExplorerContentError }}</p>
+        <div class="modal__actions">
+          <button v-if="fileExplorerModal === 'edit'" type="button" class="btn btn-primary" @click="saveFileContent" :disabled="filesBusy">Save</button>
+          <button type="button" class="btn" @click="closeFileModal">Close</button>
+        </div>
+      </div>
+    </div>
+    <div v-if="fileExplorerModal === 'delete'" class="modal-overlay" @click.self="closeFileModal">
+      <div class="confirm-dialog confirm-dialog--danger">
+        <h3 class="confirm-dialog__title">Delete {{ fileExplorerSelected && (fileExplorerSelected.isDirectory ? 'folder' : 'file') }}</h3>
+        <p class="confirm-dialog__message">Permanently delete <strong>{{ fileExplorerSelected && fileExplorerSelected.name }}</strong>? {{ fileExplorerSelected && fileExplorerSelected.isDirectory ? 'All contents will be removed.' : '' }}</p>
+        <p v-if="fileExplorerContentError" class="confirm-dialog__error">{{ fileExplorerContentError }}</p>
+        <div class="confirm-dialog__actions">
+          <button type="button" class="btn" @click="closeFileModal">Cancel</button>
+          <button type="button" class="btn btn-danger" @click="doDeleteFile" :disabled="filesBusy">Delete</button>
+        </div>
+      </div>
+    </div>
+    <div v-if="fileExplorerModal === 'newFile' || fileExplorerModal === 'newFolder'" class="modal-overlay" @click.self="closeFileModal">
+      <div class="modal">
+        <h3 class="modal__title">{{ fileExplorerModal === 'newFolder' ? 'New folder' : 'New file' }}</h3>
+        <div class="form-group">
+          <label>Name</label>
+          <input v-model="fileExplorerNewName" type="text" :placeholder="fileExplorerModal === 'newFolder' ? 'folder-name' : 'filename.txt'" />
+        </div>
+        <div v-if="fileExplorerModal === 'newFile'" class="form-group">
+          <label>Content (optional)</label>
+          <textarea v-model="fileExplorerNewContent" rows="4" spellcheck="false" placeholder="" />
+        </div>
+        <p v-if="fileExplorerContentError" class="card__error">{{ fileExplorerContentError }}</p>
+        <div class="modal__actions">
+          <button type="button" class="btn btn-primary" @click="createFileOrFolder" :disabled="filesBusy || !fileExplorerNewName.trim()">Create</button>
+          <button type="button" class="btn" @click="closeFileModal">Cancel</button>
+        </div>
+      </div>
+    </div>
     <div v-if="showDeleteModal" class="modal-overlay" @click.self="closeDeleteModal">
       <div class="confirm-dialog confirm-dialog--danger">
         <div class="confirm-dialog__icon" aria-hidden="true">
@@ -207,6 +308,21 @@ const busyPull = ref(false);
 const busyRedeploy = ref(false);
 const busy = computed(() => busyInstall.value || busyBuild.value);
 const logsPre = ref(null);
+
+const fileExplorerPath = ref('');
+const fileExplorerEntries = ref([]);
+const fileExplorerError = ref('');
+const filesBusy = ref(false);
+const fileExplorerModal = ref(null);
+const fileExplorerSelected = ref(null);
+const fileExplorerContent = ref('');
+const fileExplorerContentError = ref('');
+const fileExplorerNewName = ref('');
+const fileExplorerNewContent = ref('');
+const fileExplorerBreadcrumb = computed(() => {
+  const p = (fileExplorerPath.value || '').trim();
+  return p ? p.split('/').filter(Boolean) : [];
+});
 
 function formatSize(bytes) {
   if (bytes == null) return '—';
@@ -306,6 +422,145 @@ async function copyLogs() {
   }
 }
 
+async function loadFileList() {
+  if (!app.value) return;
+  fileExplorerError.value = '';
+  filesBusy.value = true;
+  try {
+    const data = await api.apps.files.list(route.params.id, fileExplorerPath.value);
+    fileExplorerEntries.value = data.entries || [];
+  } catch (e) {
+    fileExplorerError.value = e.message || 'Failed to load directory';
+    fileExplorerEntries.value = [];
+  } finally {
+    filesBusy.value = false;
+  }
+}
+
+function navigateInto(entry) {
+  if (!entry.isDirectory) return;
+  fileExplorerPath.value = entry.path;
+  loadFileList();
+}
+
+function navigateToBreadcrumb(index) {
+  const parts = fileExplorerBreadcrumb.value.slice(0, index + 1);
+  fileExplorerPath.value = parts.join('/');
+  loadFileList();
+}
+
+function closeFileModal() {
+  fileExplorerModal.value = null;
+  fileExplorerSelected.value = null;
+  fileExplorerContent.value = '';
+  fileExplorerContentError.value = '';
+  fileExplorerNewName.value = '';
+  fileExplorerNewContent.value = '';
+}
+
+async function openViewFile(entry) {
+  fileExplorerSelected.value = entry;
+  fileExplorerContentError.value = '';
+  fileExplorerModal.value = 'view';
+  filesBusy.value = true;
+  try {
+    const data = await api.apps.files.getContent(route.params.id, entry.path);
+    fileExplorerContent.value = data.content ?? '';
+  } catch (e) {
+    fileExplorerContentError.value = e.message || 'Failed to load file';
+    fileExplorerContent.value = '';
+  } finally {
+    filesBusy.value = false;
+  }
+}
+
+async function openEditFile(entry) {
+  fileExplorerSelected.value = entry;
+  fileExplorerContentError.value = '';
+  fileExplorerModal.value = 'edit';
+  filesBusy.value = true;
+  try {
+    const data = await api.apps.files.getContent(route.params.id, entry.path);
+    fileExplorerContent.value = data.content ?? '';
+  } catch (e) {
+    fileExplorerContentError.value = e.message || 'Failed to load file';
+    fileExplorerContent.value = '';
+  } finally {
+    filesBusy.value = false;
+  }
+}
+
+async function saveFileContent() {
+  if (!fileExplorerSelected.value) return;
+  fileExplorerContentError.value = '';
+  filesBusy.value = true;
+  try {
+    await api.apps.files.setContent(route.params.id, fileExplorerSelected.value.path, fileExplorerContent.value);
+    setFeedback('success', 'File saved.');
+    closeFileModal();
+  } catch (e) {
+    fileExplorerContentError.value = e.message || 'Failed to save';
+  } finally {
+    filesBusy.value = false;
+  }
+}
+
+function confirmDeleteFile(entry) {
+  fileExplorerSelected.value = entry;
+  fileExplorerContentError.value = '';
+  fileExplorerModal.value = 'delete';
+}
+
+async function doDeleteFile() {
+  if (!fileExplorerSelected.value) return;
+  fileExplorerContentError.value = '';
+  filesBusy.value = true;
+  try {
+    await api.apps.files.delete(route.params.id, fileExplorerSelected.value.path);
+    setFeedback('success', fileExplorerSelected.value.isDirectory ? 'Folder deleted.' : 'File deleted.');
+    closeFileModal();
+    loadFileList();
+  } catch (e) {
+    fileExplorerContentError.value = e.message || 'Delete failed';
+  } finally {
+    filesBusy.value = false;
+  }
+}
+
+function openNewFileModal() {
+  fileExplorerNewName.value = '';
+  fileExplorerNewContent.value = '';
+  fileExplorerContentError.value = '';
+  fileExplorerModal.value = 'newFile';
+}
+
+function openNewFolderModal() {
+  fileExplorerNewName.value = '';
+  fileExplorerContentError.value = '';
+  fileExplorerModal.value = 'newFolder';
+}
+
+async function createFileOrFolder() {
+  const name = fileExplorerNewName.value.trim();
+  if (!name) return;
+  const base = fileExplorerPath.value ? fileExplorerPath.value + '/' : '';
+  const fullPath = base + name;
+  fileExplorerContentError.value = '';
+  filesBusy.value = true;
+  try {
+    const type = fileExplorerModal.value === 'newFolder' ? 'directory' : 'file';
+    const content = type === 'file' ? fileExplorerNewContent.value : '';
+    await api.apps.files.create(route.params.id, fullPath, type, content);
+    setFeedback('success', type === 'directory' ? 'Folder created.' : 'File created.');
+    closeFileModal();
+    loadFileList();
+  } catch (e) {
+    fileExplorerContentError.value = e.message || 'Create failed';
+  } finally {
+    filesBusy.value = false;
+  }
+}
+
 onMounted(() => {
   load();
   loadLogs();
@@ -316,7 +571,12 @@ watch(() => route.params.id, () => {
   load();
   loadEnv();
   loadLogs();
+  fileExplorerPath.value = '';
 });
+
+watch([() => app.value, fileExplorerPath], () => {
+  if (app.value && app.value.size != null) loadFileList();
+}, { immediate: true });
 
 async function doStart() {
   try {
@@ -718,6 +978,102 @@ section.card + section.card {
   max-height: 320px;
   user-select: text;
   cursor: text;
+}
+.files-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+.files-breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+}
+.files-breadcrumb__item {
+  background: none;
+  border: none;
+  padding: 0.25rem 0.5rem;
+  color: var(--accent);
+  cursor: pointer;
+  border-radius: var(--radius);
+}
+.files-breadcrumb__item:hover {
+  background: var(--bg-hover);
+  color: var(--accent-hover);
+}
+.files-breadcrumb__sep {
+  color: var(--text-muted);
+}
+.files-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+.files-table__row td {
+  vertical-align: middle;
+}
+.files-table__link,
+.files-table__name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.files-table__link:hover {
+  color: var(--accent);
+}
+.files-table__icon {
+  font-size: 1rem;
+}
+.modal {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  max-width: 420px;
+  width: 100%;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+}
+.modal--file {
+  max-width: 720px;
+  width: 100%;
+}
+.modal__title {
+  margin: 0 0 1rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  word-break: break-all;
+}
+.modal__textarea {
+  width: 100%;
+  min-height: 200px;
+  padding: 0.75rem;
+  font-family: ui-monospace, monospace;
+  font-size: 0.8125rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 1rem;
+  resize: vertical;
+}
+.modal__textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.modal__actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
 }
 .modal-overlay {
   position: fixed;

@@ -414,3 +414,132 @@ appsRouter.put('/:id/env', (req, res, next) => {
     next(e);
   }
 });
+
+const MAX_READ_FILE_SIZE = 512 * 1024;
+
+function resolveAppPath(app, relativePath) {
+  const base = path.resolve(appManager.getAppDir(app));
+  const raw = (relativePath || '').replace(/^\/*/, '');
+  const resolved = path.normalize(path.join(base, raw));
+  if (!resolved.startsWith(base) || resolved === base && raw !== '' && raw !== '.') {
+    throw new Error('Path is outside app directory');
+  }
+  return resolved;
+}
+
+appsRouter.get('/:id/files', (req, res, next) => {
+  try {
+    const app = db.getApp(req.params.id);
+    if (!app) return res.status(404).json({ error: 'App not found' });
+    const dirPath = resolveAppPath(app, req.query.path || '');
+    if (!fs.existsSync(dirPath)) return res.status(404).json({ error: 'Directory not found' });
+    const stat = fs.statSync(dirPath);
+    if (!stat.isDirectory()) return res.status(400).json({ error: 'Not a directory' });
+    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    const base = appManager.getAppDir(app);
+    const prefix = path.relative(base, dirPath) || '';
+    const toSlash = (p) => p.split(path.sep).join('/');
+    const list = entries.map((e) => {
+      const full = path.join(dirPath, e.name);
+      let size = 0;
+      try {
+        const s = fs.statSync(full);
+        size = s.isFile() ? s.size : 0;
+      } catch (_) {}
+      const rel = prefix ? path.join(prefix, e.name) : e.name;
+      return {
+        name: e.name,
+        path: toSlash(rel),
+        isDirectory: e.isDirectory(),
+        size,
+      };
+    }).sort((a, b) => {
+      if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
+      return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+    });
+    res.json({ path: toSlash(prefix), entries: list });
+  } catch (e) {
+    if (e.message && e.message.includes('outside')) return res.status(400).json({ error: e.message });
+    next(e);
+  }
+});
+
+appsRouter.get('/:id/files/content', (req, res, next) => {
+  try {
+    const app = db.getApp(req.params.id);
+    if (!app) return res.status(404).json({ error: 'App not found' });
+    const filePath = resolveAppPath(app, req.query.path || '');
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
+    const stat = fs.statSync(filePath);
+    if (!stat.isFile()) return res.status(400).json({ error: 'Not a file' });
+    if (stat.size > MAX_READ_FILE_SIZE) return res.status(400).json({ error: 'File too large to view (max 512 KB)' });
+    const content = fs.readFileSync(filePath, 'utf-8');
+    res.json({ content });
+  } catch (e) {
+    if (e.message && e.message.includes('outside')) return res.status(400).json({ error: e.message });
+    next(e);
+  }
+});
+
+appsRouter.put('/:id/files/content', (req, res, next) => {
+  try {
+    const app = db.getApp(req.params.id);
+    if (!app) return res.status(404).json({ error: 'App not found' });
+    const filePath = resolveAppPath(app, req.body.path);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
+    const stat = fs.statSync(filePath);
+    if (!stat.isFile()) return res.status(400).json({ error: 'Not a file' });
+    const content = typeof req.body.content === 'string' ? req.body.content : '';
+    fs.writeFileSync(filePath, content, 'utf-8');
+    res.json({ ok: true });
+  } catch (e) {
+    if (e.message && e.message.includes('outside')) return res.status(400).json({ error: e.message });
+    next(e);
+  }
+});
+
+appsRouter.post('/:id/files', (req, res, next) => {
+  try {
+    const app = db.getApp(req.params.id);
+    if (!app) return res.status(404).json({ error: 'App not found' });
+    const rel = (req.body.path || '').trim().replace(/^\/*/, '');
+    if (!rel || /\.\./.test(rel)) return res.status(400).json({ error: 'Invalid path' });
+    const type = req.body.type === 'directory' ? 'directory' : 'file';
+    const targetPath = resolveAppPath(app, rel);
+    const base = appManager.getAppDir(app);
+    if (!targetPath.startsWith(base) || targetPath === base) return res.status(400).json({ error: 'Invalid path' });
+    if (fs.existsSync(targetPath)) return res.status(409).json({ error: 'Already exists' });
+    if (type === 'directory') {
+      fs.mkdirSync(targetPath, { recursive: true });
+    } else {
+      const dir = path.dirname(targetPath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(targetPath, typeof req.body.content === 'string' ? req.body.content : '', 'utf-8');
+    }
+    res.status(201).json({ ok: true });
+  } catch (e) {
+    if (e.message && e.message.includes('outside')) return res.status(400).json({ error: e.message });
+    next(e);
+  }
+});
+
+appsRouter.delete('/:id/files', (req, res, next) => {
+  try {
+    const app = db.getApp(req.params.id);
+    if (!app) return res.status(404).json({ error: 'App not found' });
+    const filePath = resolveAppPath(app, req.query.path || '');
+    const base = appManager.getAppDir(app);
+    if (filePath === base || !filePath.startsWith(base)) return res.status(400).json({ error: 'Cannot delete app root' });
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Not found' });
+    const stat = fs.statSync(filePath);
+    if (stat.isDirectory()) {
+      fs.rmSync(filePath, { recursive: true });
+    } else {
+      fs.unlinkSync(filePath);
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    if (e.message && e.message.includes('outside')) return res.status(400).json({ error: e.message });
+    next(e);
+  }
+});
