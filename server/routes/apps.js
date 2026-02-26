@@ -218,8 +218,8 @@ appsRouter.post('/:id/install', (req, res, next) => {
   try {
     const app = db.getApp(req.params.id);
     if (!app) return res.status(404).json({ error: 'App not found' });
-    appManager.runInstall(app);
-    res.json({ ok: true });
+    const out = appManager.runInstall(app);
+    res.json({ ok: true, stdout: out.stdout || '', stderr: out.stderr || '' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -229,8 +229,8 @@ appsRouter.post('/:id/build', (req, res, next) => {
   try {
     const app = db.getApp(req.params.id);
     if (!app) return res.status(404).json({ error: 'App not found' });
-    appManager.runBuild(app);
-    res.json({ ok: true });
+    const out = appManager.runBuild(app);
+    res.json({ ok: true, stdout: out.stdout || '', stderr: out.stderr || '' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

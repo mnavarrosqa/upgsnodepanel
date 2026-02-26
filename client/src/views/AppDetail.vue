@@ -1,13 +1,17 @@
 <template>
-  <div v-if="app">
+  <div v-if="app" class="app-detail">
+    <div v-if="actionFeedback.message" class="action-feedback" :class="actionFeedback.type" role="status">
+      {{ actionFeedback.message }}
+      <button type="button" class="action-feedback__dismiss" aria-label="Dismiss" @click="clearFeedback">×</button>
+    </div>
     <p v-if="saving" class="saving-banner">Saving…</p>
     <div class="app-detail-content" :class="{ 'is-disabled': saving }">
-    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:1rem; margin-bottom:1.5rem;">
-      <div>
-        <router-link to="/apps" style="font-size:0.875rem; color:var(--text-muted); margin-bottom:0.25rem; display:inline-block;">← Apps</router-link>
-        <h1 class="page-title" style="margin:0;">{{ app.name }}</h1>
-      </div>
-      <div class="action-btns">
+      <header class="app-detail-header">
+        <div class="app-detail-title">
+          <router-link to="/apps" class="app-detail-back">← Apps</router-link>
+          <h1 class="page-title">{{ app.name }}</h1>
+        </div>
+        <div class="app-detail-actions">
         <button type="button" class="btn" @click="doStart" :disabled="app.status === 'running' || saving" title="Run">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
           Run
@@ -21,87 +25,87 @@
           Restart
         </button>
         <button type="button" class="btn btn-danger" @click="confirmDelete" :disabled="saving" title="Delete">Delete</button>
-      </div>
-    </div>
-    <div class="grid-2">
-      <div class="card">
-        <h3 style="margin:0 0 0.75rem; font-size:1rem;">Access</h3>
-        <p v-if="app.domain" style="margin:0 0 0.25rem;">
-          <a :href="(app.ssl_active || app.ssl_enabled) ? `https://${app.domain}` : `http://${app.domain}`" target="_blank" rel="noopener">
-            {{ (app.ssl_active || app.ssl_enabled) ? 'https' : 'http' }}://{{ app.domain }}
-          </a>
-          <span v-if="app.ssl_active" class="badge badge-success" style="margin-left:0.5rem;">SSL ✓</span>
-          <span v-else-if="app.ssl_enabled" class="badge badge-warn" style="margin-left:0.5rem;">SSL pending</span>
-        </p>
-        <p v-if="serverIp" style="margin:0; font-size:0.875rem; color:var(--text-muted);">
-          Or by IP: <a :href="`http://${serverIp}:${app.port}`" target="_blank" rel="noopener">{{ serverIp }}:{{ app.port }}</a>
-        </p>
-        <p v-if="!app.domain && serverIp" style="margin:0.5rem 0 0; font-size:0.875rem; color:var(--text-muted);">Set a domain in Edit to use a friendly URL.</p>
-      </div>
-      <div class="card">
-        <h3 style="margin:0 0 0.75rem; font-size:1rem;">Status</h3>
-        <span class="badge" :class="app.status === 'running' ? 'badge-success' : 'badge-muted'">{{ app.status }}</span>
-      </div>
-    </div>
-    <div class="card">
-      <h3 style="margin:0 0 1rem; font-size:1rem;">Edit</h3>
+        </div>
+      </header>
+      <section class="app-detail-grid app-detail-grid--top">
+        <div class="card">
+          <h2 class="card__title">Access</h2>
+          <p v-if="app.domain" class="card__line">
+            <a :href="(app.ssl_active || app.ssl_enabled) ? `https://${app.domain}` : `http://${app.domain}`" target="_blank" rel="noopener">
+              {{ (app.ssl_active || app.ssl_enabled) ? 'https' : 'http' }}://{{ app.domain }}
+            </a>
+            <span v-if="app.ssl_active" class="badge badge-success">SSL ✓</span>
+            <span v-else-if="app.ssl_enabled" class="badge badge-warn">SSL pending</span>
+          </p>
+          <p v-if="serverIp" class="card__muted">Or by IP: <a :href="`http://${serverIp}:${app.port}`" target="_blank" rel="noopener">{{ serverIp }}:{{ app.port }}</a></p>
+          <p v-if="!app.domain && serverIp" class="card__muted">Set a domain in Edit to use a friendly URL.</p>
+        </div>
+        <div class="card">
+          <h2 class="card__title">Status</h2>
+          <span class="badge" :class="app.status === 'running' ? 'badge-success' : 'badge-muted'">{{ app.status }}</span>
+        </div>
+      </section>
+      <section class="card">
+        <h2 class="card__title">Edit</h2>
       <form @submit.prevent="save">
         <fieldset :disabled="saving">
-        <div class="form-group">
-          <label>Domain</label>
-          <input v-model="edit.domain" type="text" placeholder="app.example.com" />
-        </div>
-        <div class="form-group">
-          <label style="display:flex; align-items:center; gap:0.5rem;">
-            <input v-model="edit.ssl_enabled" type="checkbox" />
-            Enable SSL
-          </label>
-        </div>
-        <div class="form-group">
-          <label>Node version</label>
-          <select v-if="nodeVersionOptions.length" v-model="edit.node_version">
-            <option v-for="v in nodeVersionOptions" :key="v" :value="v">{{ v }}</option>
-          </select>
-          <span v-else style="font-size:0.875rem; color:var(--text-muted);">{{ app.node_version || '—' }}</span>
-        </div>
-        <div class="form-group">
-          <label>Install command</label>
-          <input v-model="edit.install_cmd" type="text" />
-        </div>
-        <div class="form-group">
-          <label>Build command</label>
-          <input v-model="edit.build_cmd" type="text" />
-        </div>
-        <div class="form-group">
-          <label>Start command</label>
-          <input v-model="edit.start_cmd" type="text" />
-        </div>
-        <button type="submit" class="btn btn-primary" :disabled="saving">Save</button>
+          <div class="form-row form-row--2">
+            <div class="form-group">
+              <label>Domain</label>
+              <input v-model="edit.domain" type="text" placeholder="app.example.com" />
+            </div>
+            <div class="form-group form-group--checkbox">
+              <label><input v-model="edit.ssl_enabled" type="checkbox" /> Enable SSL</label>
+            </div>
+          </div>
+          <div class="form-row form-row--3">
+            <div class="form-group">
+              <label>Node version</label>
+              <select v-if="nodeVersionOptions.length" v-model="edit.node_version">
+                <option v-for="v in nodeVersionOptions" :key="v" :value="v">{{ v }}</option>
+              </select>
+              <span v-else class="form-static">{{ app.node_version || '—' }}</span>
+            </div>
+            <div class="form-group">
+              <label>Install command</label>
+              <input v-model="edit.install_cmd" type="text" placeholder="npm install" />
+            </div>
+            <div class="form-group">
+              <label>Build command</label>
+              <input v-model="edit.build_cmd" type="text" placeholder="npm run build" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Start command</label>
+            <input v-model="edit.start_cmd" type="text" placeholder="npm start" />
+          </div>
+          <button type="submit" class="btn btn-primary" :disabled="saving">Save</button>
         </fieldset>
       </form>
-    </div>
-    <div class="card">
-      <h3 style="margin:0 0 0.75rem; font-size:1rem;">Actions</h3>
-      <div class="action-btns">
-        <button type="button" class="btn" @click="runInstall" :disabled="busy || saving">Run install</button>
-        <button type="button" class="btn" @click="runBuild" :disabled="busy || saving">Run build</button>
-      </div>
-    </div>
-    <div class="card">
-      <h3 style="margin:0 0 0.75rem; font-size:1rem;">Environment (.env)</h3>
-      <p style="margin:0 0 0.5rem; font-size:0.875rem; color:var(--text-muted);">Variables for this app. Restart the app for changes to take effect.</p>
-      <textarea v-model="envContent" class="env-editor" placeholder="NODE_ENV=production&#10;PORT=3000" rows="10" spellcheck="false" :disabled="saving" />
-      <div class="action-btns" style="margin-top:0.5rem;">
-        <button type="button" class="btn btn-primary" @click="saveEnv" :disabled="savingEnv || saving">Save .env</button>
-        <button type="button" class="btn" @click="loadEnv" :disabled="saving">Reload</button>
-      </div>
-      <p v-if="envError" style="margin:0.5rem 0 0; font-size:0.875rem; color:var(--danger);">{{ envError }}</p>
-    </div>
-    <div class="card">
-      <h3 style="margin:0 0 0.75rem; font-size:1rem;">Logs</h3>
-      <pre class="logs">{{ logs }}</pre>
-      <button type="button" class="btn" @click="loadLogs" style="margin-top:0.5rem;" :disabled="saving">Refresh logs</button>
-    </div>
+      </section>
+      <section class="card">
+        <h2 class="card__title">Run commands</h2>
+        <p class="card__muted">Re-run install or build in the app directory. Use after changing commands above.</p>
+        <div class="action-btns">
+          <button type="button" class="btn" @click="runInstall" :disabled="busy || saving">{{ busyInstall ? 'Running…' : 'Run install' }}</button>
+          <button type="button" class="btn" @click="runBuild" :disabled="busy || saving">{{ busyBuild ? 'Running…' : 'Run build' }}</button>
+        </div>
+      </section>
+      <section class="card">
+        <h2 class="card__title">Environment (.env)</h2>
+        <p class="card__muted">Variables for this app. Restart the app for changes to take effect.</p>
+        <textarea v-model="envContent" class="env-editor" placeholder="NODE_ENV=production&#10;PORT=3000" rows="10" spellcheck="false" :disabled="saving" />
+        <div class="action-btns">
+          <button type="button" class="btn btn-primary" @click="saveEnv" :disabled="savingEnv || saving">Save .env</button>
+          <button type="button" class="btn" @click="loadEnv" :disabled="saving">Reload</button>
+        </div>
+        <p v-if="envError" class="card__error">{{ envError }}</p>
+      </section>
+      <section class="card">
+        <h2 class="card__title">Logs</h2>
+        <pre class="logs">{{ logs }}</pre>
+        <button type="button" class="btn" @click="loadLogs" :disabled="saving">Refresh logs</button>
+      </section>
     </div>
     <div v-if="showDeleteModal" class="modal-overlay" @click.self="closeDeleteModal">
       <div class="confirm-dialog confirm-dialog--danger">
@@ -149,7 +153,6 @@ const nodeVersionOptions = computed(() => {
 const serverIp = ref('');
 const logs = ref('');
 const saving = ref(false);
-const busy = ref(false);
 const showDeleteModal = ref(false);
 const deleting = ref(false);
 const deleteError = ref('');
@@ -157,15 +160,37 @@ const loadError = ref('');
 const envContent = ref('');
 const savingEnv = ref(false);
 const envError = ref('');
+const actionFeedback = ref({ type: 'success', message: '' });
+const feedbackTimer = ref(null);
+const busyInstall = ref(false);
+const busyBuild = ref(false);
+const busy = computed(() => busyInstall.value || busyBuild.value);
+
+function setFeedback(type, message) {
+  if (feedbackTimer.value) clearTimeout(feedbackTimer.value);
+  actionFeedback.value = { type, message };
+  feedbackTimer.value = setTimeout(() => {
+    actionFeedback.value = { type: 'success', message: '' };
+    feedbackTimer.value = null;
+  }, 5000);
+}
+
+function clearFeedback() {
+  if (feedbackTimer.value) clearTimeout(feedbackTimer.value);
+  feedbackTimer.value = null;
+  actionFeedback.value = { type: 'success', message: '' };
+}
 
 async function loadEnv() {
   envError.value = '';
   try {
     const data = await api.apps.env(route.params.id);
     envContent.value = data.env != null ? String(data.env) : '';
+    setFeedback('success', '.env loaded.');
   } catch (e) {
     envContent.value = '';
     envError.value = e.message || 'Failed to load .env';
+    setFeedback('error', e.message || 'Failed to load .env');
   }
 }
 
@@ -174,8 +199,10 @@ async function saveEnv() {
   envError.value = '';
   try {
     await api.apps.updateEnv(route.params.id, envContent.value);
+    setFeedback('success', '.env saved.');
   } catch (e) {
     envError.value = e.message || 'Failed to save .env';
+    setFeedback('error', e.message || 'Failed to save .env');
   } finally {
     savingEnv.value = false;
   }
@@ -210,8 +237,10 @@ async function loadLogs() {
   try {
     const data = await api.apps.logs(route.params.id);
     logs.value = data.logs || 'No logs';
+    setFeedback('success', 'Logs refreshed.');
   } catch (_) {
     logs.value = 'Failed to load logs';
+    setFeedback('error', 'Failed to load logs.');
   }
 }
 
@@ -231,21 +260,30 @@ async function doStart() {
   try {
     await api.apps.start(route.params.id);
     app.value = await api.apps.get(route.params.id);
-  } catch (_) {}
+    setFeedback('success', 'App started.');
+  } catch (e) {
+    setFeedback('error', e.message || 'Start failed.');
+  }
 }
 
 async function doStop() {
   try {
     await api.apps.stop(route.params.id);
     app.value = await api.apps.get(route.params.id);
-  } catch (_) {}
+    setFeedback('success', 'App stopped.');
+  } catch (e) {
+    setFeedback('error', e.message || 'Stop failed.');
+  }
 }
 
 async function doRestart() {
   try {
     await api.apps.restart(route.params.id);
     app.value = await api.apps.get(route.params.id);
-  } catch (_) {}
+    setFeedback('success', 'App restarted.');
+  } catch (e) {
+    setFeedback('error', e.message || 'Restart failed.');
+  }
 }
 
 async function save() {
@@ -261,26 +299,35 @@ async function save() {
       build_cmd: updated.build_cmd || '',
       start_cmd: updated.start_cmd || '',
     };
+    setFeedback('success', 'Settings saved.');
+  } catch (e) {
+    setFeedback('error', e.message || 'Save failed.');
   } finally {
     saving.value = false;
   }
 }
 
 async function runInstall() {
-  busy.value = true;
+  busyInstall.value = true;
   try {
     await api.apps.install(route.params.id);
+    setFeedback('success', 'Install completed.');
+  } catch (e) {
+    setFeedback('error', e.message || 'Install failed.');
   } finally {
-    busy.value = false;
+    busyInstall.value = false;
   }
 }
 
 async function runBuild() {
-  busy.value = true;
+  busyBuild.value = true;
   try {
     await api.apps.build(route.params.id);
+    setFeedback('success', 'Build completed.');
+  } catch (e) {
+    setFeedback('error', e.message || 'Build failed.');
   } finally {
-    busy.value = false;
+    busyBuild.value = false;
   }
 }
 
@@ -311,6 +358,45 @@ async function doDelete() {
 </script>
 
 <style scoped>
+.app-detail {
+  position: relative;
+}
+.action-feedback {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  margin: 0 0 1rem;
+  padding: 0.6rem 1rem;
+  font-size: 0.875rem;
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+.action-feedback.success {
+  background: rgba(34, 197, 94, 0.2);
+  color: var(--success);
+  border: 1px solid var(--success);
+}
+.action-feedback.error {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--danger);
+  border: 1px solid var(--danger);
+}
+.action-feedback__dismiss {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.8;
+  padding: 0 0.25rem;
+}
+.action-feedback__dismiss:hover {
+  opacity: 1;
+}
 .saving-banner {
   margin: 0 0 1rem;
   padding: 0.5rem 0.75rem;
@@ -318,6 +404,101 @@ async function doDelete() {
   color: white;
   font-size: 0.875rem;
   border-radius: var(--radius);
+}
+.app-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.app-detail-title {
+  min-width: 0;
+}
+.app-detail-back {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin-bottom: 0.25rem;
+  display: inline-block;
+}
+.app-detail-back:hover {
+  color: var(--accent);
+}
+.app-detail-title .page-title {
+  margin: 0;
+}
+.app-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.app-detail-grid {
+  display: grid;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.app-detail-grid--top {
+  grid-template-columns: 1fr auto;
+}
+@media (max-width: 640px) {
+  .app-detail-grid--top {
+    grid-template-columns: 1fr;
+  }
+}
+.card__title {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+.card__line {
+  margin: 0 0 0.25rem;
+}
+.card__line .badge {
+  margin-left: 0.5rem;
+}
+.card__muted {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+.card__muted + .card__muted {
+  margin-top: 0.25rem;
+}
+.card__error {
+  margin: 0.5rem 0 0;
+  font-size: 0.875rem;
+  color: var(--danger);
+}
+.card + .card,
+section.card + section.card {
+  margin-top: 1rem;
+}
+.form-row {
+  display: grid;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.form-row--2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+.form-row--3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+@media (max-width: 640px) {
+  .form-row--2,
+  .form-row--3 {
+    grid-template-columns: 1fr;
+  }
+}
+.form-group--checkbox label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.form-static {
+  font-size: 0.875rem;
+  color: var(--text-muted);
 }
 .app-detail-content.is-disabled {
   opacity: 0.7;
