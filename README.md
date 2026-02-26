@@ -43,7 +43,7 @@ Open http://localhost:3000 and log in (with SKIP_PAM=1, any username/password wo
    - `SESSION_SECRET`: random string for session signing
    - `PANEL_PORT`: port the panel listens on (e.g. 3000)
    - `APPS_BASE_PATH`: directory for cloned app repos (e.g. `/var/www/upgs-node-apps`)
-   - `NGINX_APPS_CONF_DIR`: nginx include dir for app vhosts (e.g. `/etc/nginx/conf.d/upgs-node-apps`)
+   - `NGINX_APPS_CONF_DIR`: directory where the panel writes app vhost files. Use `/etc/nginx/conf.d` so nginx’s default `include conf.d/*.conf` loads them. If you use a subdir (e.g. `conf.d/upgs-node-apps`), add `include /path/to/that/subdir/*.conf;` in nginx.conf.
    - `NVM_DIR`: path to nvm (e.g. `/root/.nvm`)
 
 2. Build and run:
