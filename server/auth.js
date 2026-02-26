@@ -1,14 +1,31 @@
 import { Router } from 'express';
+import { spawnSync } from 'child_process';
+import { fileURLToPath } from 'url';
+import path from 'path';
+import fs from 'fs';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PAM_HELPER = path.join(__dirname, 'lib', 'auth-pam');
 
 let pamAuthenticatePromise = null;
-try {
-  const pam = await import('node-linux-pam');
-  const mod = pam.default || pam;
-  pamAuthenticatePromise = mod.pamAuthenticatePromise || (mod.pamAuthenticate && ((opts) => new Promise((resolve, reject) => {
-    mod.pamAuthenticate(opts, (err) => (err ? reject(err) : resolve()));
-  })));
-} catch (_) {
-  // PAM not available (e.g. non-Linux or build failed)
+if (fs.existsSync(PAM_HELPER) && fs.statSync(PAM_HELPER).mode & 0o111) {
+  // Use compiled PAM helper (preferred, no npm native module needed)
+  pamAuthenticatePromise = (opts) => {
+    const result = spawnSync(PAM_HELPER, [], {
+      encoding: 'utf8',
+      env: { ...process.env, PAM_USER: opts.username, PAM_PASSWORD: opts.password },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    if (result.status !== 0) throw new Error('auth failed');
+  };
+} else {
+  try {
+    const pam = await import('node-linux-pam');
+    const mod = pam.default || pam;
+    pamAuthenticatePromise = mod.pamAuthenticatePromise || (mod.pamAuthenticate && ((opts) => new Promise((resolve, reject) => {
+      mod.pamAuthenticate(opts, (err) => (err ? reject(err) : resolve()));
+    })));
+  } catch (_) {}
 }
 
 const SKIP_PAM = process.env.SKIP_PAM === '1' || process.env.SKIP_PAM === 'true';
@@ -24,11 +41,11 @@ authRouter.post('/login', async (req, res, next) => {
     if (!SKIP_PAM) {
       if (!pamAuthenticatePromise) {
         return res.status(503).json({
-          error: 'PAM authentication not available. On the server: sudo apt-get install -y libpam0g-dev, then in the panel install directory run npm rebuild node-linux-pam and sudo systemctl restart upgs-node-panel',
+          error: 'PAM authentication not available. Run the installer again so the PAM helper is compiled.',
         });
       }
       try {
-        await pamAuthenticatePromise({ username, password });
+        await (Promise.resolve(pamAuthenticatePromise({ username, password })));
       } catch (err) {
         return res.status(401).json({ error: 'Invalid credentials' });
       }

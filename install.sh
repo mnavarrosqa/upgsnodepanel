@@ -86,15 +86,17 @@ else
 fi
 
 echo "[*] Installing Node dependencies and building client..."
-# Clean install so native modules (e.g. node-linux-pam) are built for this system, not copied from another OS
+# Clean install so native modules are built for this system, not copied from another OS
 rm -rf node_modules client/node_modules
 npm install
-# Build PAM module for login with system credentials (libpam0g-dev already installed above)
-if ! npm rebuild node-linux-pam 2>/dev/null; then
-  npm install node-linux-pam --build-from-source 2>/dev/null || true
-fi
-if ! node --input-type=module -e "import('node-linux-pam').then(() => console.log('PAM OK')).catch(e => { console.error('PAM load failed:', e.message); process.exit(1); })" 2>/dev/null; then
-  echo "[!] PAM module could not be loaded. Login will not work with system credentials. Check: libpam0g-dev installed, run npm rebuild node-linux-pam in $INSTALL_DIR"
+# Compile PAM auth helper (no npm native module needed; works on all Node versions)
+if [ -f server/lib/auth-pam.c ]; then
+  if gcc -o server/lib/auth-pam server/lib/auth-pam.c -lpam 2>/dev/null; then
+    chmod 755 server/lib/auth-pam
+    echo "[*] PAM auth helper compiled."
+  else
+    echo "[!] Could not compile PAM helper. Ensure libpam0g-dev is installed. Login may fail."
+  fi
 fi
 cd client && npm install && npm run build && cd ..
 
