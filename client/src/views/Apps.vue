@@ -6,12 +6,17 @@
     </div>
     <div class="card" v-if="showForm" :class="{ 'is-disabled': creating }">
       <h3 style="margin:0 0 1rem;">New app</h3>
+      <div class="source-type-tabs">
+        <button type="button" class="source-type-tab" :class="{ active: sourceType === 'git' }" @click="sourceType = 'git'">From Git</button>
+        <button type="button" class="source-type-tab" :class="{ active: sourceType === 'zip' }" @click="sourceType = 'zip'">From ZIP</button>
+      </div>
       <form @submit.prevent="create">
         <fieldset :disabled="creating">
         <div class="form-group">
           <label>Name</label>
           <input v-model="form.name" type="text" required placeholder="my-app" />
         </div>
+        <template v-if="sourceType === 'git'">
         <div class="form-group">
           <label>Repository URL</label>
           <input
@@ -31,6 +36,12 @@
             @focus="fetchDefaultBranchIfEmpty"
           />
           <p v-if="branchDetected" class="domain-check domain-check--ok">{{ branchDetected }}</p>
+        </div>
+        </template>
+        <div v-else class="form-group">
+          <label>Project ZIP</label>
+          <input type="file" accept=".zip" @change="onZipSelect" />
+          <p class="form-hint">Upload a .zip of your Node project (must contain package.json at root or in a single root folder).</p>
         </div>
         <div class="form-group">
           <label>Node version</label>
@@ -184,6 +195,8 @@ const domainCheckStatus = ref('');
 const domainCheckMessage = ref('');
 const branchDetected = ref('');
 const nodeVersions = ref([]);
+const sourceType = ref('git');
+const zipFile = ref(null);
 const form = ref({
   name: '',
   repo_url: '',
@@ -195,6 +208,11 @@ const form = ref({
   domain: '',
   ssl_enabled: false,
 });
+
+function onZipSelect(e) {
+  const f = e.target.files && e.target.files[0];
+  zipFile.value = f || null;
+}
 
 const loadError = ref('');
 const busyId = ref(null);
@@ -226,6 +244,7 @@ async function loadNodeVersions() {
 
 function closeForm() {
   showForm.value = false;
+  zipFile.value = null;
   domainCheckStatus.value = '';
   domainCheckMessage.value = '';
   branchDetected.value = '';
@@ -335,6 +354,8 @@ onMounted(() => {
 const stepLabels = {
   clone: 'Cloning repository…',
   clone_done: 'Repository ready',
+  extract: 'Extracting zip…',
+  extract_done: 'Extract complete',
   install: 'Running install…',
   install_done: 'Install complete',
   build: 'Running build…',
@@ -352,27 +373,52 @@ function appendLogs(logs, stdout, stderr) {
   if (stderr && stderr.trim()) logs.push(stderr.trim());
 }
 
+function handleCreateEvent(ev) {
+  if (ev.step) {
+    creationStep.value = ev.message || stepLabels[ev.step] || ev.step;
+    if (ev.stdout || ev.stderr) {
+      const lines = creationLogs.value ? creationLogs.value.split('\n') : [];
+      appendLogs(lines, ev.stdout, ev.stderr);
+      creationLogs.value = lines.join('\n');
+    }
+    if (ev.sslError) creationLogs.value = (creationLogs.value ? creationLogs.value + '\n' : '') + ev.sslError;
+  }
+  if (ev.error) createError.value = ev.error;
+}
+
 async function create() {
   createError.value = '';
   creationStep.value = 'Starting…';
   creationLogs.value = '';
   creating.value = true;
   try {
-    const result = await api.apps.createWithProgress(form.value, (ev) => {
-      if (ev.step) {
-        creationStep.value = ev.message || stepLabels[ev.step] || ev.step;
-        if (ev.stdout || ev.stderr) {
-          const lines = creationLogs.value ? creationLogs.value.split('\n') : [];
-          appendLogs(lines, ev.stdout, ev.stderr);
-          creationLogs.value = lines.join('\n');
-        }
-        if (ev.sslError) creationLogs.value = (creationLogs.value ? creationLogs.value + '\n' : '') + ev.sslError;
+    let result;
+    if (sourceType.value === 'zip') {
+      if (!zipFile.value) {
+        createError.value = 'Please select a .zip file';
+        return;
       }
-      if (ev.error) createError.value = ev.error;
-    });
+      const fd = new FormData();
+      fd.append('zip', zipFile.value);
+      fd.append('name', form.value.name);
+      fd.append('install_cmd', form.value.install_cmd || 'npm install');
+      fd.append('build_cmd', form.value.build_cmd || '');
+      fd.append('start_cmd', form.value.start_cmd || 'npm start');
+      fd.append('node_version', form.value.node_version || '20');
+      fd.append('domain', form.value.domain || '');
+      fd.append('ssl_enabled', form.value.ssl_enabled ? '1' : '0');
+      result = await api.apps.createFromZipWithProgress(fd, handleCreateEvent);
+    } else {
+      if (!form.value.repo_url || !form.value.repo_url.trim()) {
+        createError.value = 'Repository URL is required';
+        return;
+      }
+      result = await api.apps.createWithProgress(form.value, handleCreateEvent);
+    }
     creationSslWarning.value = result.sslWarning || '';
     showForm.value = false;
-    form.value = { name: '', repo_url: '', branch: '', node_version: nodeVersions.value[0] || '20', install_cmd: 'npm install', build_cmd: '', start_cmd: 'npm start', domain: '', ssl_enabled: false };
+    form.value = { name: '', repo_url: '', branch: 'main', node_version: nodeVersions.value[0] || '20', install_cmd: 'npm install', build_cmd: '', start_cmd: 'npm start', domain: '', ssl_enabled: false };
+    zipFile.value = null;
     domainCheckStatus.value = '';
     domainCheckMessage.value = '';
     branchDetected.value = '';
@@ -396,6 +442,34 @@ function closeCreationOverlay() {
 </script>
 
 <style scoped>
+.source-type-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+}
+.source-type-tab {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.875rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.source-type-tab:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+.source-type-tab.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(99, 102, 241, 0.1);
+}
+.form-hint {
+  margin: 0.25rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
 .creation-overlay {
   position: fixed;
   inset: 0;

@@ -1,5 +1,6 @@
 import path from 'path';
 import fs from 'fs';
+import AdmZip from 'adm-zip';
 import { run, runPm2, runGit } from '../lib/exec.js';
 import { writeAppConfig, removeAppConfig, reloadNginx, certsExist, obtainCert } from './nginx.js';
 
@@ -73,6 +74,41 @@ export function cloneApp(app) {
 function getDefaultBranchInRepo(dir) {
   const { stdout } = runGit(['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: dir });
   return (stdout || '').trim() || 'main';
+}
+
+const UPLOAD_REPO_PLACEHOLDER = 'upload://';
+
+export function isUploadApp(app) {
+  return app.repo_url === UPLOAD_REPO_PLACEHOLDER;
+}
+
+/**
+ * Extract a .zip file to the app directory. Creates the dir if needed.
+ * If the zip has a single root directory, its contents are moved to the app dir so package.json is at the root.
+ */
+export function extractZipToApp(app, zipPath) {
+  const dir = appDir(app);
+  try {
+    fs.mkdirSync(APPS_BASE, { recursive: true });
+  } catch (_) {}
+  if (fs.existsSync(dir)) {
+    fs.rmSync(dir, { recursive: true });
+  }
+  fs.mkdirSync(dir, { recursive: true });
+  const zip = new AdmZip(zipPath);
+  zip.extractAllTo(dir, true);
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  if (entries.length === 1 && entries[0].isDirectory()) {
+    const singleDir = path.join(dir, entries[0].name);
+    const children = fs.readdirSync(singleDir, { withFileTypes: true });
+    for (const c of children) {
+      const src = path.join(singleDir, c.name);
+      const dest = path.join(dir, c.name);
+      fs.renameSync(src, dest);
+    }
+    fs.rmdirSync(singleDir);
+  }
+  return { dir };
 }
 
 export function runInstall(app) {

@@ -1,11 +1,27 @@
 import { Router } from 'express';
 import fs from 'fs';
+import path from 'path';
+import os from 'os';
+import multer from 'multer';
 import * as db from '../db.js';
 import * as appManager from '../services/appManager.js';
 import * as nginx from '../services/nginx.js';
-import { validateAppInput } from '../lib/validate.js';
+import { validateAppInput, validateName, validateDomain, validateCommand, validateNodeVersion, validateRepoUrl, validateBranch } from '../lib/validate.js';
 
 export const appsRouter = Router();
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (_, __, cb) => cb(null, os.tmpdir()),
+    filename: (_, file, cb) => cb(null, `upgs-upload-${Date.now()}-${path.basename(file.originalname || 'app.zip')}`),
+  }),
+  limits: { fileSize: 100 * 1024 * 1024 },
+  fileFilter: (_, file, cb) => {
+    const name = (file.originalname || '').toLowerCase();
+    if (name.endsWith('.zip')) return cb(null, true);
+    cb(new Error('Only .zip files are allowed'));
+  },
+});
 
 function appToJson(row) {
   if (!row) return null;
@@ -42,6 +58,92 @@ appsRouter.get('/:id', (req, res, next) => {
 function writeStreamLine(res, obj) {
   res.write(JSON.stringify(obj) + '\n');
 }
+
+function buildCreateDataFromBody(body, isZip = false) {
+  const name = validateName(body.name);
+  if (!name) throw new Error('name is required');
+  return {
+    name,
+    repo_url: isZip ? 'upload://' : (validateRepoUrl(body.repo_url) || (() => { throw new Error('repo_url is required'); })()),
+    branch: body.branch != null && String(body.branch).trim() !== '' ? validateBranch(body.branch) : null,
+    install_cmd: validateCommand(body.install_cmd, 'install_cmd') || 'npm install',
+    build_cmd: validateCommand(body.build_cmd, 'build_cmd') || null,
+    start_cmd: validateCommand(body.start_cmd, 'start_cmd') || 'npm start',
+    node_version: validateNodeVersion(body.node_version) || '20',
+    domain: validateDomain(body.domain) || null,
+    ssl_enabled: body.ssl_enabled === '1' || body.ssl_enabled === true,
+  };
+}
+
+appsRouter.post('/from-zip', upload.single('zip'), async (req, res, next) => {
+  const stream = req.query.stream === '1' || req.get('Accept') === 'application/x-ndjson';
+  let zipPath = null;
+  try {
+    if (!req.file || !req.file.path) return res.status(400).json({ error: 'No .zip file uploaded' });
+    zipPath = req.file.path;
+    const body = req.body || {};
+    let createData;
+    try {
+      createData = buildCreateDataFromBody(body, true);
+    } catch (e) {
+      return res.status(400).json({ error: e.message || 'Validation failed' });
+    }
+    const app = db.createApp(createData);
+    const send = (obj) => stream && writeStreamLine(res, obj);
+    if (stream) {
+      res.setHeader('Content-Type', 'application/x-ndjson');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.flushHeaders && res.flushHeaders();
+    }
+    try {
+      send({ step: 'extract', message: 'Extracting zip…' });
+      appManager.extractZipToApp(app, zipPath);
+      send({ step: 'extract_done', message: 'Extract complete' });
+      send({ step: 'install', message: 'Running install…' });
+      const installOut = appManager.runInstall(app);
+      send({ step: 'install_done', stdout: installOut.stdout || '', stderr: installOut.stderr || '' });
+      if (app.build_cmd) {
+        send({ step: 'build', message: 'Running build…' });
+        const buildOut = appManager.runBuild(app);
+        send({ step: 'build_done', stdout: buildOut.stdout || '', stderr: buildOut.stderr || '' });
+      }
+      let nginxResult = {};
+      if (app.domain) {
+        send({ step: 'nginx', message: 'Configuring nginx…' });
+        if (app.ssl_enabled) send({ step: 'ssl', message: 'Obtaining SSL certificate…' });
+        nginxResult = appManager.setupNginxAndReload(app);
+        if (app.ssl_enabled) send({ step: 'ssl_done', message: nginxResult.sslError ? 'SSL certificate could not be obtained' : 'SSL ready', sslError: nginxResult.sslError });
+        send({ step: 'nginx_done' });
+      }
+      send({ step: 'start', message: 'Starting app…' });
+      appManager.startApp(app);
+      send({ step: 'start_done' });
+      const finalApp = appToJson(db.getApp(app.id));
+      if (stream) {
+        writeStreamLine(res, { done: true, app: finalApp, sslWarning: nginxResult.sslError || undefined });
+        res.end();
+      } else {
+        res.status(201).json(finalApp);
+      }
+    } catch (e) {
+      console.error('App setup error (from-zip):', e);
+      db.deleteApp(app.id);
+      try { appManager.deleteFromPm2(app); appManager.teardownNginx(app); } catch (_) {}
+      try {
+        const dir = appManager.appDir(app);
+        if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true });
+      } catch (_) {}
+      const errMsg = e.message || 'Setup failed';
+      if (stream) { writeStreamLine(res, { error: errMsg }); res.end(); } else { return res.status(500).json({ error: errMsg }); }
+    }
+  } catch (e) {
+    if (!stream) return next(e);
+    writeStreamLine(res, { error: e.message || 'Request failed' });
+    res.end();
+  } finally {
+    if (zipPath && fs.existsSync(zipPath)) try { fs.unlinkSync(zipPath); } catch (_) {}
+  }
+});
 
 appsRouter.post('/', async (req, res, next) => {
   const stream = req.query.stream === '1' || req.get('Accept') === 'application/x-ndjson';
