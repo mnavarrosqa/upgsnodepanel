@@ -191,8 +191,7 @@ export function setupNginxAndReload(app) {
       obtainCert(domain);
     } catch (e) {
       console.warn('Could not obtain SSL cert for', domain, e.message);
-      const msg = (e.stderr || e.stdout || e.message || 'Certbot failed').toString().trim();
-      sslError = msg.split('\n').pop() || e.message || 'Could not obtain certificate';
+      sslError = e.message || 'Could not obtain certificate';
     }
   }
   writeAppConfig(app);

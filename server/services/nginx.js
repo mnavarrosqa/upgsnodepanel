@@ -34,6 +34,22 @@ export function certsExist(domain) {
   return d.length > 0 && fs.existsSync(certPath(d)) && fs.existsSync(keyPath(d));
 }
 
+/** Extract a short, actionable error message from certbot stdout+stderr (avoids generic "see the logfile" line). */
+function certbotErrorMessage(stdout, stderr) {
+  const raw = [stderr, stdout].filter(Boolean).join('\n').trim();
+  if (!raw) return 'Certbot failed';
+  const generic = /see the logfile|re-run certbot with -v|ask for help or search/i;
+  const lines = raw.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+  for (const line of lines) {
+    if (generic.test(line)) continue;
+    if (/error|failed|refused|timeout|nxdomain|problem|unable|invalid|denied|no valid ip/i.test(line)) {
+      return line.length > 200 ? line.slice(0, 197) + '...' : line;
+    }
+  }
+  const first = lines.find((l) => l.length > 0 && l.length < 250 && !generic.test(l));
+  return first || 'Certificate could not be obtained. Check DNS and port 80, then see /var/log/letsencrypt/letsencrypt.log';
+}
+
 /** Run certbot to obtain a certificate for the domain. Requires nginx to already have an HTTP server block for this domain. */
 export function obtainCert(domain) {
   const d = (domain || '').trim();
@@ -43,9 +59,14 @@ export function obtainCert(domain) {
   const email = process.env.LETSENCRYPT_EMAIL || process.env.CERTBOT_EMAIL;
   if (email) args.push('--email', email);
   else args.push('--register-unsafely-without-email');
-  const result = spawnSync(certbot, args, { encoding: 'utf-8', maxBuffer: 5 * 1024 * 1024 });
+  // Certbot's nginx plugin looks for 'nginx' in PATH; under systemd/PM2 PATH may not include /usr/sbin
+  const nginxDir = path.dirname(NGINX_BIN);
+  const pathEnv = process.env.PATH || '';
+  const env = { ...process.env, PATH: nginxDir + (pathEnv ? ':' + pathEnv : '') };
+  const result = spawnSync(certbot, args, { encoding: 'utf-8', maxBuffer: 5 * 1024 * 1024, env });
   if (result.status !== 0) {
-    const err = new Error(result.stderr || result.stdout || 'Certbot failed');
+    const msg = certbotErrorMessage(result.stdout, result.stderr);
+    const err = new Error(msg);
     err.stdout = result.stdout;
     err.stderr = result.stderr;
     throw err;
