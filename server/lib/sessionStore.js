@@ -50,4 +50,11 @@ export class SqliteSessionStore extends EventEmitter {
   touch(sid, session, callback) {
     this.set(sid, session, callback);
   }
+
+  regenerate(req, callback) {
+    this.destroy(req.sessionID, (err) => {
+      if (typeof this.generate === 'function') this.generate(req);
+      callback(err);
+    });
+  }
 }
