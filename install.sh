@@ -86,6 +86,7 @@ else
 fi
 
 echo "[*] Installing Node dependencies and building client..."
+echo "[*] (Deprecation warnings from transitive dependencies are normal and can be ignored.)"
 # Clean install so native modules are built for this system, not copied from another OS
 rm -rf node_modules client/node_modules
 npm install
