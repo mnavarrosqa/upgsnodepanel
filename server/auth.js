@@ -23,7 +23,9 @@ authRouter.post('/login', async (req, res, next) => {
     }
     if (!SKIP_PAM) {
       if (!pamAuthenticatePromise) {
-        return res.status(503).json({ error: 'PAM authentication not available on this system' });
+        return res.status(503).json({
+          error: 'PAM authentication not available. On the server: sudo apt-get install -y libpam0g-dev, then in the panel install directory run npm rebuild node-linux-pam and sudo systemctl restart upgs-node-panel',
+        });
       }
       try {
         await pamAuthenticatePromise({ username, password });

@@ -87,6 +87,8 @@ fi
 
 echo "[*] Installing Node dependencies and building client..."
 npm install
+# Ensure PAM module is built for this system (needed for login with system credentials)
+npm rebuild node-linux-pam 2>/dev/null || echo "[!] node-linux-pam rebuild failed; login may show 'PAM not available'. Install libpam0g-dev and run: npm rebuild node-linux-pam"
 cd client && npm install && npm run build && cd ..
 
 echo "[*] Creating .env..."
@@ -128,9 +130,25 @@ fi
 
 echo "[*] Configuring nginx for panel..."
 NGINX_PANEL_CONF="/etc/nginx/conf.d/upgs-panel.conf"
-if [ ! -f "$NGINX_PANEL_CONF" ]; then
-  sed "s/PANEL_PORT/$PANEL_PORT/g" packaging/nginx-panel.conf.example > "$NGINX_PANEL_CONF"
-  nginx -t 2>/dev/null && nginx -s reload 2>/dev/null || true
+sed "s/PANEL_PORT/$PANEL_PORT/g" packaging/nginx-panel.conf.example > "$NGINX_PANEL_CONF"
+# Disable default nginx site so port 80 serves the panel (not the default nginx page)
+rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+systemctl enable nginx 2>/dev/null || true
+systemctl start nginx 2>/dev/null || true
+if nginx -t 2>/dev/null; then
+  nginx -s reload 2>/dev/null || true
+else
+  echo "[!] nginx config test failed. Fix with: nginx -t"
+fi
+
+echo "[*] Opening firewall ports (80, 443, 22)..."
+if command -v ufw >/dev/null 2>&1; then
+  ufw allow 22/tcp comment 'SSH' 2>/dev/null || true
+  ufw allow 80/tcp comment 'HTTP panel' 2>/dev/null || true
+  ufw allow 443/tcp comment 'HTTPS' 2>/dev/null || true
+  if ufw status 2>/dev/null | grep -q "Status: active"; then
+    ufw reload 2>/dev/null || true
+  fi
 fi
 
 SERVER_IP=$(curl -s -4 ifconfig.co 2>/dev/null || curl -s -4 icanhazip.com 2>/dev/null || echo "YOUR_SERVER_IP")

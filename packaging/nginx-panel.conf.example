@@ -1,11 +1,9 @@
 # UPGS Node Panel - place in /etc/nginx/conf.d/ (e.g. upgs-panel.conf)
 # Replace PANEL_PORT with the port the panel listens on (e.g. 3000)
 # For HTTPS, add ssl_certificate directives and listen 443 ssl.
-
-# Omit default_server if you already have a default server (e.g. sites-enabled/default)
-# so nginx does not report "duplicate default server".
+# Installer disables sites-enabled/default so this is the only server on port 80.
 server {
-    listen 80;
+    listen 80 default_server;
     server_name _;
     location / {
         proxy_pass http://127.0.0.1:PANEL_PORT;
