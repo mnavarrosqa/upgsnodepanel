@@ -89,6 +89,7 @@
       </div>
     </div>
   </div>
+  <p v-else-if="loadError" style="color:var(--danger);">{{ loadError }}</p>
   <p v-else style="color:var(--text-muted);">Loading…</p>
 </template>
 
@@ -106,8 +107,10 @@ const saving = ref(false);
 const busy = ref(false);
 const showDeleteModal = ref(false);
 const deleting = ref(false);
+const loadError = ref('');
 
 async function load() {
+  loadError.value = '';
   try {
     const [appRes, ipRes] = await Promise.all([
       api.apps.get(route.params.id),
@@ -122,8 +125,9 @@ async function load() {
       build_cmd: appRes.build_cmd || '',
       start_cmd: appRes.start_cmd || '',
     };
-  } catch (_) {
+  } catch (e) {
     app.value = null;
+    loadError.value = e.message || 'Failed to load app';
   }
 }
 
@@ -167,7 +171,15 @@ async function doRestart() {
 async function save() {
   saving.value = true;
   try {
-    app.value = await api.apps.update(route.params.id, edit.value);
+    const updated = await api.apps.update(route.params.id, edit.value);
+    app.value = updated;
+    edit.value = {
+      domain: updated.domain || '',
+      ssl_enabled: updated.ssl_enabled || false,
+      install_cmd: updated.install_cmd || '',
+      build_cmd: updated.build_cmd || '',
+      start_cmd: updated.start_cmd || '',
+    };
   } finally {
     saving.value = false;
   }

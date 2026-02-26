@@ -13,9 +13,10 @@
         <p style="margin:0.5rem 0 0; font-size:0.8rem; color:var(--text-muted);">Use this IP to access apps by port if domain is not set</p>
       </div>
     </div>
+    <p v-if="loadError" class="page-error">{{ loadError }}</p>
     <div class="card">
       <h3 style="margin:0 0 1rem; font-size:1rem;">Apps at a glance</h3>
-      <div v-if="apps.length === 0" style="color:var(--text-muted);">No apps yet. <router-link to="/apps">Add an app</router-link>.</div>
+      <div v-if="apps.length === 0 && !loadError" style="color:var(--text-muted);">No apps yet. <router-link to="/apps">Add an app</router-link>.</div>
       <ul v-else style="list-style:none; padding:0; margin:0;">
         <li v-for="app in apps" :key="app.id" style="padding:0.5rem 0; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:1rem;">
           <span class="badge" :class="app.status === 'running' ? 'badge-success' : 'badge-muted'">{{ app.status }}</span>
@@ -33,12 +34,16 @@ import { api } from '../api';
 
 const apps = ref([]);
 const serverIp = ref('');
+const loadError = ref('');
 
 onMounted(async () => {
+  loadError.value = '';
   try {
     const [appsRes, ipRes] = await Promise.all([api.apps.list(), api.system.ip()]);
     apps.value = appsRes.apps || [];
     serverIp.value = ipRes.ip || null;
-  } catch (_) {}
+  } catch (e) {
+    loadError.value = e.message || 'Failed to load dashboard';
+  }
 });
 </script>

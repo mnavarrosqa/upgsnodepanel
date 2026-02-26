@@ -22,7 +22,16 @@ const router = createRouter({
 });
 
 router.beforeEach(async (to, from, next) => {
-  if (to.meta.public) return next();
+  if (to.meta.public) {
+    try {
+      await api.auth.me();
+      const redirectPath = to.query.redirect && to.query.redirect !== '/login' ? to.query.redirect : '/';
+      next({ path: redirectPath, query: {} });
+    } catch {
+      next();
+    }
+    return;
+  }
   try {
     await api.auth.me();
     next();

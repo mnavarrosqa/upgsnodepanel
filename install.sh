@@ -55,6 +55,7 @@ REPO_URL="${REPO_URL:-https://github.com/mnavarrosqa/upgsnodepanel.git}"
 if [ -d "$SCRIPT_DIR/server" ] && [ -f "$SCRIPT_DIR/package.json" ]; then
   cp -a "$SCRIPT_DIR" "$INSTALL_DIR"
   cd "$INSTALL_DIR"
+  rm -f .env
 else
   echo "[*] Cloning from $REPO_URL..."
   git clone --depth 1 "$REPO_URL" "$INSTALL_DIR"

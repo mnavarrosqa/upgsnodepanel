@@ -1,6 +1,8 @@
 import { Router } from 'express';
+import fs from 'fs';
 import * as db from '../db.js';
 import * as appManager from '../services/appManager.js';
+import { validateAppInput } from '../lib/validate.js';
 
 export const appsRouter = Router();
 
@@ -35,10 +37,24 @@ appsRouter.get('/:id', (req, res, next) => {
 appsRouter.post('/', async (req, res, next) => {
   try {
     const data = req.body || {};
-    if (!data.name || !data.repo_url) {
-      return res.status(400).json({ error: 'name and repo_url required' });
+    let createData;
+    try {
+      const validated = validateAppInput(data, true);
+      createData = {
+        name: validated.name,
+        repo_url: validated.repo_url,
+        branch: validated.branch ?? 'main',
+        install_cmd: validated.install_cmd ?? 'npm install',
+        build_cmd: validated.build_cmd ?? null,
+        start_cmd: validated.start_cmd ?? 'npm start',
+        node_version: validated.node_version ?? '20',
+        domain: validated.domain ?? null,
+        ssl_enabled: validated.ssl_enabled ?? false,
+      };
+    } catch (e) {
+      return res.status(400).json({ error: e.message || 'Validation failed' });
     }
-    const app = db.createApp(data);
+    const app = db.createApp(createData);
     try {
       appManager.cloneApp(app);
       appManager.runInstall(app);
@@ -49,6 +65,15 @@ appsRouter.post('/', async (req, res, next) => {
       appManager.startApp(app);
     } catch (e) {
       console.error('App setup error:', e);
+      db.deleteApp(app.id);
+      try {
+        appManager.deleteFromPm2(app);
+        appManager.teardownNginx(app);
+      } catch (_) {}
+      try {
+        const dir = appManager.appDir(app);
+        if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true });
+      } catch (_) {}
       return res.status(500).json({ error: e.message || 'Setup failed' });
     }
     res.status(201).json(appToJson(db.getApp(app.id)));
@@ -61,10 +86,22 @@ appsRouter.put('/:id', (req, res, next) => {
   try {
     const app = db.getApp(req.params.id);
     if (!app) return res.status(404).json({ error: 'App not found' });
-    const updated = db.updateApp(req.params.id, req.body || {});
+    let patch;
+    try {
+      patch = validateAppInput(req.body || {}, false);
+    } catch (e) {
+      return res.status(400).json({ error: e.message || 'Validation failed' });
+    }
+    if (Object.keys(patch).length === 0) {
+      return res.json(appToJson(db.getApp(app.id)));
+    }
+    const updated = db.updateApp(req.params.id, patch);
     try {
       appManager.setupNginxAndReload(updated);
-    } catch (_) {}
+    } catch (e) {
+      console.error('Nginx reload failed:', e);
+      return res.status(502).json({ error: 'Settings saved but nginx reload failed: ' + (e.message || 'unknown') });
+    }
     res.json(appToJson(db.getApp(updated.id)));
   } catch (e) {
     next(e);

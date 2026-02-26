@@ -1,6 +1,6 @@
 import path from 'path';
 import fs from 'fs';
-import { run } from '../lib/exec.js';
+import { run, runGit } from '../lib/exec.js';
 import { writeAppConfig, removeAppConfig, reloadNginx } from './nginx.js';
 
 const APPS_BASE = process.env.APPS_BASE_PATH || '/var/www/upgs-node-apps';
@@ -17,14 +17,16 @@ function appDir(app) {
 
 export function cloneApp(app) {
   const dir = appDir(app);
+  const branch = app.branch || 'main';
   try {
     fs.mkdirSync(APPS_BASE, { recursive: true });
   } catch (_) {}
   if (fs.existsSync(dir)) {
-    run(`git fetch && git checkout ${app.branch || 'main'} && git pull`, { cwd: dir });
+    runGit(['fetch'], { cwd: dir });
+    runGit(['checkout', branch], { cwd: dir });
+    runGit(['pull'], { cwd: dir });
   } else {
-    const branch = app.branch || 'main';
-    run(`git clone -b ${branch} ${app.repo_url} "${dir}"`, {});
+    runGit(['clone', '-b', branch, app.repo_url, dir], {});
   }
   return dir;
 }

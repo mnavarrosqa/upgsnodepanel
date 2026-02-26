@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { execSync, spawnSync } from 'child_process';
 
 const NVM_DIR = process.env.NVM_DIR || '/root/.nvm';
 
@@ -28,4 +28,26 @@ export function run(command, options = {}) {
     maxBuffer: 10 * 1024 * 1024,
   });
   return { stdout: result || '', stderr: '' };
+}
+
+/**
+ * Run git with argv (no shell). Throws on non-zero exit.
+ * @param {string[]} args - e.g. ['clone', '-b', 'main', 'https://...', '/path']
+ * @param {{ cwd?: string }} options
+ */
+export function runGit(args, options = {}) {
+  const { cwd } = options;
+  const result = spawnSync('git', args, {
+    encoding: 'utf-8',
+    cwd,
+    maxBuffer: 10 * 1024 * 1024,
+  });
+  if (result.status !== 0) {
+    const err = new Error(result.stderr || result.stdout || 'git failed');
+    err.stdout = result.stdout;
+    err.stderr = result.stderr;
+    err.status = result.status;
+    throw err;
+  }
+  return { stdout: result.stdout || '', stderr: result.stderr || '' };
 }

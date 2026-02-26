@@ -21,24 +21,21 @@ authRouter.post('/login', async (req, res, next) => {
     if (!username || !password) {
       return res.status(400).json({ error: 'Username and password required' });
     }
-    let ok = false;
-    if (SKIP_PAM) {
-      ok = true;
-    } else if (pamAuthenticatePromise) {
-      await pamAuthenticatePromise({ username, password });
-      ok = true;
-    } else {
-      return res.status(503).json({ error: 'PAM authentication not available on this system' });
+    if (!SKIP_PAM) {
+      if (!pamAuthenticatePromise) {
+        return res.status(503).json({ error: 'PAM authentication not available on this system' });
+      }
+      try {
+        await pamAuthenticatePromise({ username, password });
+      } catch (err) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
     }
-    if (ok) {
-      req.session.regenerate((err) => {
-        if (err) return next(err);
-        req.session.user = username;
-        res.json({ user: username });
-      });
-    } else {
-      res.status(401).json({ error: 'Invalid credentials' });
-    }
+    req.session.regenerate((err) => {
+      if (err) return next(err);
+      req.session.user = username;
+      res.json({ user: username });
+    });
   } catch (err) {
     if (err.message && err.message.includes('auth')) {
       return res.status(401).json({ error: 'Invalid credentials' });

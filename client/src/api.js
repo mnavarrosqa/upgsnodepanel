@@ -10,9 +10,21 @@ function request(path, options = {}) {
       ...options.headers,
     },
   }).then(async (res) => {
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || res.statusText);
+    let data = {};
+    const text = await res.text();
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch (_) {}
+    }
+    if (!res.ok) {
+      const message = data.error || res.statusText || 'Request failed';
+      throw new Error(message);
+    }
     return data;
+  }).catch((err) => {
+    if (err instanceof Error) throw err;
+    throw new Error('Network or request failed');
   });
 }
 

@@ -19,6 +19,9 @@ nodeRouter.post('/versions', (req, res, next) => {
     const versions = nodeManager.installVersion(version);
     res.json({ versions });
   } catch (e) {
-    res.status(400).json({ error: e.message || 'Install failed' });
+    if (e.message === 'Invalid version format') {
+      return res.status(400).json({ error: e.message });
+    }
+    next(e);
   }
 });

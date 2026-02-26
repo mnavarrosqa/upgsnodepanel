@@ -227,3 +227,9 @@ tr:hover td {
   flex-wrap: wrap;
   gap: 0.5rem;
 }
+
+.page-error {
+  color: var(--danger);
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+}

@@ -52,6 +52,7 @@
       </form>
       <p v-if="createError" style="margin-top:0.5rem; color:var(--danger);">{{ createError }}</p>
     </div>
+    <p v-if="loadError" style="color:var(--danger); margin-bottom:1rem;">{{ loadError }}</p>
     <div class="card">
       <div class="table-wrap">
         <table>
@@ -106,11 +107,16 @@ const form = ref({
   ssl_enabled: false,
 });
 
+const loadError = ref('');
+
 async function load() {
+  loadError.value = '';
   try {
     const data = await api.apps.list();
     apps.value = data.apps || [];
-  } catch (_) {}
+  } catch (e) {
+    loadError.value = e.message || 'Failed to load apps';
+  }
 }
 
 onMounted(load);
