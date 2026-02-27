@@ -1,9 +1,5 @@
 <template>
   <div v-if="app" class="app-detail">
-    <div v-if="actionFeedback.message" class="action-feedback" :class="actionFeedback.type" role="status">
-      {{ actionFeedback.message }}
-      <button type="button" class="action-feedback__dismiss" aria-label="Dismiss" @click="clearFeedback">×</button>
-    </div>
     <p v-if="saving" class="saving-banner">Saving…</p>
     <div class="app-detail-content" :class="{ 'is-disabled': saving }">
       <header class="app-detail-header">
@@ -347,8 +343,6 @@ const loadError = ref('');
 const envContent = ref('');
 const savingEnv = ref(false);
 const envError = ref('');
-const actionFeedback = ref({ type: 'success', message: '' });
-const feedbackTimer = ref(null);
 const busyInstall = ref(false);
 const busyBuild = ref(false);
 const busyPull = ref(false);
@@ -473,19 +467,7 @@ function formatSize(bytes) {
 }
 
 function setFeedback(type, message) {
-  if (feedbackTimer.value) clearTimeout(feedbackTimer.value);
-  actionFeedback.value = { type, message };
   showToast(type, message);
-  feedbackTimer.value = setTimeout(() => {
-    actionFeedback.value = { type: 'success', message: '' };
-    feedbackTimer.value = null;
-  }, 5000);
-}
-
-function clearFeedback() {
-  if (feedbackTimer.value) clearTimeout(feedbackTimer.value);
-  feedbackTimer.value = null;
-  actionFeedback.value = { type: 'success', message: '' };
 }
 
 async function loadEnv(showBusy = false) {
@@ -882,42 +864,6 @@ async function doDelete() {
 <style scoped>
 .app-detail {
   position: relative;
-}
-.action-feedback {
-  position: sticky;
-  top: 0;
-  z-index: 50;
-  margin: 0 0 1rem;
-  padding: 0.6rem 1rem;
-  font-size: 0.875rem;
-  border-radius: var(--radius);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-}
-.action-feedback.success {
-  background: rgba(34, 197, 94, 0.2);
-  color: var(--success);
-  border: 1px solid var(--success);
-}
-.action-feedback.error {
-  background: rgba(239, 68, 68, 0.15);
-  color: var(--danger);
-  border: 1px solid var(--danger);
-}
-.action-feedback__dismiss {
-  background: none;
-  border: none;
-  font-size: 1.25rem;
-  line-height: 1;
-  cursor: pointer;
-  opacity: 0.8;
-  padding: 0 0.25rem;
-}
-.action-feedback__dismiss:hover {
-  opacity: 1;
 }
 .app-detail-actions .btn--busy {
   cursor: wait;
