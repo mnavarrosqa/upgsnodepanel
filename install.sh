@@ -5,7 +5,7 @@ set -e
 INSTALL_DIR="${INSTALL_DIR:-/opt/upgs-node-panel}"
 PANEL_PORT="${PANEL_PORT:-3000}"
 APPS_BASE_PATH="${APPS_BASE_PATH:-/var/www/upgs-node-apps}"
-NGINX_APPS_CONF_DIR="${NGINX_APPS_CONF_DIR:-/etc/nginx/conf.d}"
+NGINX_APPS_CONF_DIR="${NGINX_APPS_CONF_DIR:-/etc/nginx/upgs-node-apps.d}"
 NVM_DIR="${NVM_DIR:-/root/.nvm}"
 PM2_HOME="${PM2_HOME:-/root/.pm2}"
 
@@ -13,6 +13,19 @@ if [ "$(id -u)" -ne 0 ]; then
   echo "Run as root or with sudo."
   exit 1
 fi
+
+# Panel user: when run via sudo, use the invoking user; otherwise root
+PANEL_USER="${SUDO_USER:-root}"
+PANEL_HOME="$(getent passwd "$PANEL_USER" 2>/dev/null | cut -d: -f6)"
+if [ -z "$PANEL_HOME" ]; then
+  if [ "$PANEL_USER" = "root" ]; then
+    PANEL_HOME="/root"
+  else
+    PANEL_HOME="/home/$PANEL_USER"
+  fi
+fi
+NVM_DIR="${NVM_DIR:-$PANEL_HOME/.nvm}"
+PM2_HOME="${PM2_HOME:-$PANEL_HOME/.pm2}"
 
 # Require Ubuntu 20, 22, 24, or 25
 if [ -f /etc/os-release ]; then
@@ -44,22 +57,24 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
   certbot python3-certbot-nginx 2>/dev/null || DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
   git nginx build-essential libpam0g-dev curl ca-certificates
 
-echo "[*] Installing nvm and Node.js..."
+echo "[*] Installing nvm and Node.js (as $PANEL_USER)..."
 if [ ! -s "$NVM_DIR/nvm.sh" ]; then
-  mkdir -p "$NVM_DIR"
-  curl -sSf https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash -s -- --no-use
+  sudo -u "$PANEL_USER" env HOME="$PANEL_HOME" NVM_DIR="$NVM_DIR" bash -c '
+    mkdir -p "$NVM_DIR"
+    curl -sSf https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash -s -- --no-use
+  '
 fi
-# shellcheck source=/dev/null
-. "$NVM_DIR/nvm.sh"
-nvm install --lts 2>/dev/null || nvm install 20
-nvm use --lts 2>/dev/null || nvm use 20
-
-echo "[*] Installing PM2..."
-npm install -g pm2
+sudo -u "$PANEL_USER" env HOME="$PANEL_HOME" NVM_DIR="$NVM_DIR" bash -c '
+  # shellcheck source=/dev/null
+  . "$NVM_DIR/nvm.sh"
+  nvm install --lts 2>/dev/null || nvm install 20
+  nvm use --lts 2>/dev/null || nvm use 20
+  npm install -g pm2
+'
 
 # Symlink node, npm, pm2 so systemd and any shell see them (nvm path is not in service PATH)
 for bin in node npm pm2; do
-  B="$(command -v "$bin" 2>/dev/null)"
+  B="$(sudo -u "$PANEL_USER" env HOME="$PANEL_HOME" NVM_DIR="$NVM_DIR" bash -c '. "$NVM_DIR/nvm.sh" && command -v '"$bin"'" 2>/dev/null)"
   if [ -z "$B" ]; then
     echo "[!] $bin not found after install. Aborting."
     exit 1
@@ -69,7 +84,7 @@ done
 
 # Ensure PM2 home exists so panel and shell use the same instance
 mkdir -p "$PM2_HOME"
-chown root:root "$PM2_HOME" 2>/dev/null || true
+chown -R "$PANEL_USER:$PANEL_USER" "$PM2_HOME"
 
 echo "[*] Installing panel to $INSTALL_DIR..."
 mkdir -p "$(dirname "$INSTALL_DIR")"
@@ -85,11 +100,13 @@ else
   cd "$INSTALL_DIR"
 fi
 
+chown -R "$PANEL_USER:$PANEL_USER" "$INSTALL_DIR"
+
 echo "[*] Installing Node dependencies and building client..."
 echo "[*] (Deprecation warnings from transitive dependencies are normal and can be ignored.)"
-# Clean install so native modules are built for this system, not copied from another OS
+# Clean install so native modules are built for this system; run as panel user so ownership is correct
 rm -rf node_modules client/node_modules
-npm install
+sudo -u "$PANEL_USER" env HOME="$PANEL_HOME" NVM_DIR="$NVM_DIR" bash -c 'cd "'"$INSTALL_DIR"'" && npm install'
 # Compile PAM auth helper (no npm native module needed; works on all Node versions)
 mkdir -p server/lib
 if [ ! -f server/lib/auth-pam.c ]; then
@@ -139,12 +156,13 @@ fi
 if [ -f server/lib/auth-pam.c ]; then
   if gcc -o server/lib/auth-pam server/lib/auth-pam.c -lpam 2>/dev/null; then
     chmod 755 server/lib/auth-pam
+    chown "$PANEL_USER:$PANEL_USER" server/lib/auth-pam
     echo "[*] PAM auth helper compiled."
   else
     echo "[!] Could not compile PAM helper. Ensure libpam0g-dev is installed. Login may fail."
   fi
 fi
-cd client && npm install && npm run build && cd ..
+sudo -u "$PANEL_USER" env HOME="$PANEL_HOME" NVM_DIR="$NVM_DIR" bash -c 'cd "'"$INSTALL_DIR"'/client" && npm install && npm run build'
 
 echo "[*] Creating .env..."
 if [ ! -f .env ]; then
@@ -161,7 +179,10 @@ if ! grep -q '^APP_PORT_MIN=' .env 2>/dev/null; then echo "APP_PORT_MIN=$APP_POR
 if ! grep -q '^APP_PORT_MAX=' .env 2>/dev/null; then echo "APP_PORT_MAX=$APP_PORT_MAX" >> .env; fi
 sed -i "s|APPS_BASE_PATH=.*|APPS_BASE_PATH=$APPS_BASE_PATH|" .env 2>/dev/null || true
 sed -i "s|NGINX_APPS_CONF_DIR=.*|NGINX_APPS_CONF_DIR=$NGINX_APPS_CONF_DIR|" .env 2>/dev/null || true
+if ! grep -q '^NGINX_APPS_CONF_DIR=' .env 2>/dev/null; then echo "NGINX_APPS_CONF_DIR=$NGINX_APPS_CONF_DIR" >> .env; fi
 sed -i "s|NVM_DIR=.*|NVM_DIR=$NVM_DIR|" .env 2>/dev/null || true
+if ! grep -q '^HOME=' .env 2>/dev/null; then echo "HOME=$PANEL_HOME" >> .env; fi
+sed -i "s|^HOME=.*|HOME=$PANEL_HOME|" .env 2>/dev/null || true
 # So panel and shell share the same PM2 instance (apps show in `pm2 list`)
 if grep -q '^PM2_HOME=' .env 2>/dev/null; then
   sed -i "s|^PM2_HOME=.*|PM2_HOME=$PM2_HOME|" .env
@@ -171,11 +192,39 @@ fi
 
 echo "[*] Creating directories..."
 mkdir -p "$APPS_BASE_PATH"
-# App vhosts are written as upgs-node-app-{id}.conf into NGINX_APPS_CONF_DIR (conf.d); no subdir needed
+chown -R "$PANEL_USER:$PANEL_USER" "$APPS_BASE_PATH"
+
+# Nginx app vhosts: writable directory so panel (running as PANEL_USER) can write configs
+mkdir -p "$NGINX_APPS_CONF_DIR"
+chown "$PANEL_USER":root "$NGINX_APPS_CONF_DIR"
+chmod 775 "$NGINX_APPS_CONF_DIR"
+if [ ! -f /etc/nginx/conf.d/upgs-node-apps-include.conf ]; then
+  echo "include $NGINX_APPS_CONF_DIR/*.conf;" > /etc/nginx/conf.d/upgs-node-apps-include.conf
+fi
+
+# Allow panel user to run nginx reload and certbot without password (only when not root)
+if [ "$PANEL_USER" != "root" ]; then
+  NGINX_BIN_PATH="$(command -v nginx 2>/dev/null || echo '/usr/sbin/nginx')"
+  CERTBOT_BIN_PATH="$(command -v certbot 2>/dev/null || echo '/usr/bin/certbot')"
+  SUDOERS_FILE="/etc/sudoers.d/upgs-node-panel"
+  {
+    echo "Defaults:$PANEL_USER !requiretty"
+    echo "$PANEL_USER ALL=(root) NOPASSWD: $NGINX_BIN_PATH -t, $NGINX_BIN_PATH -s reload"
+    echo "$PANEL_USER ALL=(root) NOPASSWD: $CERTBOT_BIN_PATH certonly *"
+  } > "$SUDOERS_FILE"
+  chmod 440 "$SUDOERS_FILE"
+  if ! visudo -c -f "$SUDOERS_FILE" >/dev/null 2>&1; then
+    echo "[!] Sudoers file invalid. Removing. Nginx reload and certbot may fail for the panel."
+    rm -f "$SUDOERS_FILE"
+  fi
+fi
 
 echo "[*] Installing systemd unit..."
 cp packaging/upgs-node-panel.service /etc/systemd/system/
-sed -i "s|/opt/upgs-node-panel|$INSTALL_DIR|g" /etc/systemd/system/upgs-node-panel.service
+sed -i "s|INSTALL_DIR|$INSTALL_DIR|g" /etc/systemd/system/upgs-node-panel.service
+sed -i "s|PANEL_USER|$PANEL_USER|g" /etc/systemd/system/upgs-node-panel.service
+sed -i "s|PANEL_HOME|$PANEL_HOME|g" /etc/systemd/system/upgs-node-panel.service
+sed -i "s|__PM2_HOME__|$PM2_HOME|g" /etc/systemd/system/upgs-node-panel.service
 systemctl daemon-reload
 systemctl enable upgs-node-panel
 systemctl start upgs-node-panel
@@ -228,6 +277,6 @@ SERVER_IP=$(curl -s -4 ifconfig.co 2>/dev/null || curl -s -4 icanhazip.com 2>/de
 echo ""
 echo "UPGS Node Panel is installed and running."
 echo "  Panel URL: http://$SERVER_IP/"
-echo "  Log in with your server (root) username and password."
+echo "  Log in with your server username and password (e.g. $PANEL_USER)."
 echo "  Apps you add via the panel will appear in: pm2 list"
 echo ""

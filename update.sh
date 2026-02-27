@@ -25,6 +25,19 @@ fi
 
 cd "$INSTALL_DIR"
 
+# Detect panel user from systemd unit (so npm/build run as same user and keep ownership)
+PANEL_USER="root"
+if [ -f /etc/systemd/system/upgs-node-panel.service ]; then
+  u="$(grep '^User=' /etc/systemd/system/upgs-node-panel.service 2>/dev/null | cut -d= -f2)"
+  [ -n "$u" ] && PANEL_USER="$u"
+fi
+PANEL_HOME="$(getent passwd "$PANEL_USER" 2>/dev/null | cut -d: -f6)"
+if [ -z "$PANEL_HOME" ]; then
+  [ "$PANEL_USER" = "root" ] && PANEL_HOME="/root" || PANEL_HOME="/home/$PANEL_USER"
+fi
+NVM_DIR="$(grep '^NVM_DIR=' .env 2>/dev/null | cut -d= -f2-)"
+[ -z "$NVM_DIR" ] && NVM_DIR="$PANEL_HOME/.nvm"
+
 if ! git remote get-url origin &>/dev/null; then
   echo "[*] Adding remote origin..."
   git remote add origin "$REPO_URL"
@@ -92,18 +105,16 @@ out:
 AUTHEOF
 fi
 if [ -f server/lib/auth-pam.c ]; then
-  gcc -o server/lib/auth-pam server/lib/auth-pam.c -lpam 2>/dev/null && chmod 755 server/lib/auth-pam || true
+  gcc -o server/lib/auth-pam server/lib/auth-pam.c -lpam 2>/dev/null && chmod 755 server/lib/auth-pam && chown "$PANEL_USER:$PANEL_USER" server/lib/auth-pam 2>/dev/null || true
 fi
 
 echo "[*] Installing Node dependencies..."
-export NVM_DIR="${NVM_DIR:-/root/.nvm}"
-if [ -s "$NVM_DIR/nvm.sh" ]; then
-  # shellcheck source=/dev/null
-  . "$NVM_DIR/nvm.sh"
-  nvm use --lts 2>/dev/null || nvm use 20 2>/dev/null || true
-fi
-npm install
-cd client && npm install && npm run build && cd ..
+sudo -u "$PANEL_USER" env HOME="$PANEL_HOME" NVM_DIR="$NVM_DIR" bash -c '
+  cd "'"$INSTALL_DIR"'"
+  if [ -s "$NVM_DIR/nvm.sh" ]; then . "$NVM_DIR/nvm.sh"; nvm use --lts 2>/dev/null || nvm use 20 2>/dev/null || true; fi
+  npm install
+  cd client && npm install && npm run build
+'
 
 echo "[*] Restarting panel..."
 systemctl restart upgs-node-panel

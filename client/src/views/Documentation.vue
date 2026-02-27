@@ -19,7 +19,7 @@
 
     <section id="auth" class="doc-section card">
       <h2 class="card__title">Authentication</h2>
-      <p class="card__muted">Login uses <strong>PAM</strong> (Pluggable Authentication Modules): you sign in with the same username and password you use for SSH (typically <code>root</code>). No separate panel password. Session is stored in a cookie; set <code>SESSION_SECRET</code> in <code>.env</code> to a random string in production.</p>
+      <p class="card__muted">Login uses <strong>PAM</strong> (Pluggable Authentication Modules): you sign in with the same username and password you use for SSH (e.g. the user who runs the panel, or <code>root</code>). No separate panel password. Session is stored in a cookie; set <code>SESSION_SECRET</code> in <code>.env</code> to a random string in production.</p>
     </section>
 
     <section id="dashboard" class="doc-section card">
@@ -93,7 +93,7 @@
 
     <section id="installer" class="doc-section card">
       <h2 class="card__title">Installer and updates</h2>
-      <p class="card__muted">On a fresh Ubuntu 20–25 server (as root or with sudo), run the installer from the repo or via one-liner. It installs system dependencies, nvm, Node LTS, PM2, the panel, systemd unit, nginx config for the panel, and optionally certbot; it also opens firewall ports for SSH, HTTP, HTTPS, and the app port range.</p>
+      <p class="card__muted">On a fresh Ubuntu 20–25 server (as root or with sudo), run the installer from the repo or via one-liner. When you run <code>sudo ./install.sh</code>, the panel runs as your user and you log in with that username; when run as root, it runs as root. The installer sets up system dependencies, nvm, Node LTS, PM2, the panel, systemd unit, nginx config for the panel, and optionally certbot; it also opens firewall ports for SSH, HTTP, HTTPS, and the app port range. Nginx reload and certbot are allowed via sudo for the panel user when not root.</p>
       <p class="card__muted">To update the panel to the latest code: run <code>./update.sh</code> from the install directory (or the one-liner from the README). Your <code>.env</code> is preserved; the script pulls the repo, runs <code>npm install</code> and client build, then restarts the panel service.</p>
     </section>
   </div>

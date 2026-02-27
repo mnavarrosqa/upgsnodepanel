@@ -3,7 +3,7 @@ import { spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
-const NVM_DIR = process.env.NVM_DIR || '/root/.nvm';
+const NVM_DIR = process.env.NVM_DIR || `${process.env.HOME || '/root'}/.nvm`;
 const NVM_VERSIONS = path.join(NVM_DIR, 'versions', 'node');
 
 /** Extract version string from dir name (e.g. v20.10.0 -> 20.10.0, v20 -> 20). Normalize to at least major.minor for display. */

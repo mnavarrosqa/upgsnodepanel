@@ -4,13 +4,13 @@ After=network.target
 
 [Service]
 Type=simple
-User=root
-WorkingDirectory=/opt/upgs-node-panel
-EnvironmentFile=/opt/upgs-node-panel/.env
+User=PANEL_USER
+WorkingDirectory=INSTALL_DIR
+EnvironmentFile=INSTALL_DIR/.env
 Environment=NODE_ENV=production
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
-Environment=HOME=/root
-Environment=PM2_HOME=/root/.pm2
+Environment=HOME=PANEL_HOME
+Environment=PM2_HOME=__PM2_HOME__
 ExecStart=/usr/local/bin/node server/index.js
 Restart=on-failure
 RestartSec=5

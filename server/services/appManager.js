@@ -5,14 +5,16 @@ import { run, runPm2, runGit } from '../lib/exec.js';
 import { writeAppConfig, removeAppConfig, reloadNginx, certsExist, obtainCert } from './nginx.js';
 
 const APPS_BASE = process.env.APPS_BASE_PATH || '/var/www/upgs-node-apps';
-const NVM_DIR = process.env.NVM_DIR || '/root/.nvm';
+const NVM_DIR = process.env.NVM_DIR || `${process.env.HOME || '/root'}/.nvm`;
 
 /** Env for PM2: force HOME and PM2_HOME so panel and shell use the same daemon. */
 function pm2Env(extra = {}) {
+  const home = process.env.HOME || '/root';
+  const pm2Home = process.env.PM2_HOME || `${home}/.pm2`;
   return {
     ...process.env,
-    HOME: '/root',
-    PM2_HOME: '/root/.pm2',
+    HOME: home,
+    PM2_HOME: pm2Home,
     ...extra,
   };
 }

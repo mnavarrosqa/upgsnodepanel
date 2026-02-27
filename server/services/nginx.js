@@ -3,10 +3,16 @@ import path from 'path';
 import { spawnSync } from 'child_process';
 import { run } from '../lib/exec.js';
 
-// Must be a directory that nginx includes (e.g. conf.d). Files are named upgs-node-app-{id}.conf.
+// Must be a directory that nginx includes (e.g. conf.d or upgs-node-apps.d). Files are named upgs-node-app-{id}.conf.
 const NGINX_APPS_DIR = process.env.NGINX_APPS_CONF_DIR || '/etc/nginx/conf.d';
 const NGINX_BIN = process.env.NGINX_BIN || '/usr/sbin/nginx';
 const LETSENCRYPT_BASE = '/etc/letsencrypt/live';
+
+/** True if the process is running as root (needed for nginx reload / certbot without sudo). */
+function isRoot() {
+  if (typeof process.getuid !== 'function') return true;
+  return process.getuid() === 0;
+}
 
 function ensureDir() {
   try {
@@ -63,7 +69,9 @@ export function obtainCert(domain) {
   const nginxDir = path.dirname(NGINX_BIN);
   const pathEnv = process.env.PATH || '';
   const env = { ...process.env, PATH: nginxDir + (pathEnv ? ':' + pathEnv : '') };
-  const result = spawnSync(certbot, args, { encoding: 'utf-8', maxBuffer: 5 * 1024 * 1024, env });
+  const runViaSudo = !isRoot();
+  const finalArgs = runViaSudo ? ['sudo', certbot, ...args] : [certbot, ...args];
+  const result = spawnSync(finalArgs[0], finalArgs.slice(1), { encoding: 'utf-8', maxBuffer: 5 * 1024 * 1024, env });
   if (result.status !== 0) {
     const msg = certbotErrorMessage(result.stdout, result.stderr);
     const err = new Error(msg);
@@ -141,8 +149,9 @@ export function removeAppConfig(id) {
 
 export function reloadNginx() {
   try {
-    run(`${NGINX_BIN} -t`, {});
-    run(`${NGINX_BIN} -s reload`, {});
+    const prefix = isRoot() ? '' : 'sudo ';
+    run(`${prefix}${NGINX_BIN} -t`, {});
+    run(`${prefix}${NGINX_BIN} -s reload`, {});
   } catch (e) {
     console.warn('Nginx reload failed:', e.message);
     throw e;

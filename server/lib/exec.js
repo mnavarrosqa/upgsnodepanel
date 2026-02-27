@@ -1,6 +1,6 @@
 import { execSync, spawnSync } from 'child_process';
 
-const NVM_DIR = process.env.NVM_DIR || '/root/.nvm';
+const NVM_DIR = process.env.NVM_DIR || `${process.env.HOME || '/root'}/.nvm`;
 const PM2_BIN_PATH = process.env.PM2_BIN || '/usr/local/bin/pm2';
 
 /**

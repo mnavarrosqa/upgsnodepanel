@@ -3,7 +3,7 @@
 set -e
 
 INSTALL_DIR="${INSTALL_DIR:-/opt/upgs-node-panel}"
-NGINX_APPS_CONF_DIR="${NGINX_APPS_CONF_DIR:-/etc/nginx/conf.d}"
+NGINX_APPS_CONF_DIR="${NGINX_APPS_CONF_DIR:-/etc/nginx/upgs-node-apps.d}"
 
 if [ "$(id -u)" -ne 0 ]; then
   echo "Run as root or with sudo."
@@ -24,9 +24,14 @@ systemctl disable upgs-node-panel 2>/dev/null || true
 rm -f /etc/systemd/system/upgs-node-panel.service
 systemctl daemon-reload
 
+echo "[*] Removing sudoers rule (if any)..."
+rm -f /etc/sudoers.d/upgs-node-panel
+
 echo "[*] Removing nginx config..."
 rm -f /etc/nginx/conf.d/upgs-panel.conf
-rm -f "$NGINX_APPS_CONF_DIR"/upgs-node-app-*.conf
+rm -f /etc/nginx/conf.d/upgs-node-apps-include.conf
+rm -f "$NGINX_APPS_CONF_DIR"/upgs-node-app-*.conf 2>/dev/null || true
+rmdir "$NGINX_APPS_CONF_DIR" 2>/dev/null || true
 nginx -t && nginx -s reload 2>/dev/null || true
 
 echo "[*] Removing install directory..."

@@ -1,6 +1,6 @@
 # UPGS Node Panel
 
-Manage and install Node.js apps on your VPS. Log in with your server (root) username and password, install Node versions via nvm, clone repos, run install/build/start commands, and expose each app via nginx (domain or IP:port). Optional SSL per app.
+Manage and install Node.js apps on your VPS. Log in with your server username and password (e.g. the user who ran the installer, or root), install Node versions via nvm, clone repos, run install/build/start commands, and expose each app via nginx (domain or IP:port). Optional SSL per app.
 
 **Repository:** [https://github.com/mnavarrosqa/upgsnodepanel](https://github.com/mnavarrosqa/upgsnodepanel)
 
@@ -15,9 +15,9 @@ Manage and install Node.js apps on your VPS. Log in with your server (root) user
 ## Requirements
 
 - **Ubuntu 20, 22, 24, or 25** (installer supports these only)
-- root or sudo
+- root or sudo (installer must run with sudo; the panel then runs as the invoking user when you use `sudo ./install.sh`, or as root when run directly as root)
 - The installer installs: nginx, git, Node.js (via nvm), PM2, PAM dev headers
-- Optional: certbot for app SSL (installed by script when available)
+- Optional: certbot for app SSL (installed by script when available). When the panel runs as a non-root user, nginx reload and certbot are invoked via sudo (the installer adds a sudoers rule).
 
 ## Quick start (development)
 
@@ -43,8 +43,8 @@ Open http://localhost:3000 and log in (with SKIP_PAM=1, any username/password wo
    - `SESSION_SECRET`: random string for session signing
    - `PANEL_PORT`: port the panel listens on (e.g. 3000)
    - `APPS_BASE_PATH`: directory for cloned app repos (e.g. `/var/www/upgs-node-apps`)
-   - `NGINX_APPS_CONF_DIR`: directory where the panel writes app vhost files. Use `/etc/nginx/conf.d` so nginx’s default `include conf.d/*.conf` loads them. If you use a subdir (e.g. `conf.d/upgs-node-apps`), add `include /path/to/that/subdir/*.conf;` in nginx.conf.
-   - `NVM_DIR`: path to nvm (e.g. `/root/.nvm`)
+   - `NGINX_APPS_CONF_DIR`: directory where the panel writes app vhost files. The installer uses `/etc/nginx/upgs-node-apps.d` (writable by the panel user) and adds an nginx include for it. If you use a different path, ensure nginx includes it.
+   - `NVM_DIR`: path to nvm (e.g. `~/.nvm` for the panel user, or `/root/.nvm` when run as root)
 
 2. Build and run:
    ```bash
