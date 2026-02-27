@@ -68,7 +68,12 @@
         <div v-for="app in apps" :key="app.id" class="card app-card">
           <div class="app-card__header">
             <span class="badge" :class="app.status === 'running' ? 'badge-success' : (app.status === 'unknown' ? 'badge-warn' : 'badge-muted')" :title="app.status_error ? (app.status + ': ' + app.status_error) : app.status">{{ app.status }}</span>
-            <span v-if="app.size != null" class="app-card__size">{{ formatBytes(app.size) }}</span>
+            <span v-if="app.status === 'running' && (app.cpu != null || app.memory != null)" class="app-card__metrics">
+              <span v-if="app.cpu != null">{{ formatCpu(app.cpu) }}</span>
+              <span v-if="app.cpu != null && app.memory != null"> · </span>
+              <span v-if="app.memory != null">{{ formatMemory(app.memory) }}</span>
+            </span>
+            <span v-else-if="app.size != null" class="app-card__size">{{ formatBytes(app.size) }}</span>
           </div>
           <h3 class="app-card__name">
             <router-link :to="`/apps/${app.id}`">{{ app.name }}</router-link>
@@ -120,6 +125,20 @@ function formatBytes(bytes) {
   const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+function formatCpu(cpu) {
+  if (cpu == null) return '—';
+  return `${Number(cpu).toFixed(1)}%`;
+}
+
+function formatMemory(bytes) {
+  if (bytes == null) return '—';
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), units.length - 1);
+  return `${(bytes / Math.pow(k, i)).toFixed(i <= 1 ? 0 : 1)} ${units[i]}`;
 }
 
 const diskUsedPercent = computed(() => {

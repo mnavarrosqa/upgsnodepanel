@@ -1,5 +1,6 @@
 import path from 'path';
 import fs from 'fs';
+import { spawn } from 'child_process';
 import AdmZip from 'adm-zip';
 import { run, runPm2, runGit, getBashPath } from '../lib/exec.js';
 import { isPortInUseSync } from '../lib/portCheck.js';
@@ -9,6 +10,7 @@ import { writeAppConfig, removeAppConfig, reloadNginx, certsExist, obtainCert, a
 
 const APPS_BASE = process.env.APPS_BASE_PATH || '/var/www/upgs-node-apps';
 const NVM_DIR = process.env.NVM_DIR || `${process.env.HOME || '/root'}/.nvm`;
+const PM2_BIN = process.env.PM2_BIN || '/usr/local/bin/pm2';
 
 /** Per-app lock for start/stop/restart so only one action runs at a time per app. */
 const inProgressAppIds = new Set();
@@ -43,6 +45,18 @@ function pm2Env(extra = {}) {
     PM2_HOME: pm2Home,
     ...extra,
   };
+}
+
+/**
+ * Persist current PM2 process list so it can be restored on reboot (pm2 resurrect).
+ * Logs and ignores errors so a failed save does not break start/stop/restart.
+ */
+function pm2Save() {
+  try {
+    runPm2(['save', '--no-update-env'], { env: pm2Env() });
+  } catch (e) {
+    console.warn('pm2 save failed:', e?.message || e);
+  }
 }
 
 function pm2Name(app) {
@@ -259,15 +273,24 @@ export function startApp(app) {
     startCmd,
   ].join('\n');
   fs.writeFileSync(scriptPath, scriptBody, 'utf8');
+  const restartOpts = [];
+  if (app.max_restarts != null && Number.isInteger(app.max_restarts)) {
+    restartOpts.push('--max-restarts', String(app.max_restarts));
+  }
+  if (app.restart_delay != null && Number.isInteger(app.restart_delay)) {
+    restartOpts.push('--exp-backoff-restart-delay', String(app.restart_delay));
+  }
   try {
     runPm2(['describe', name], { env: pm2Env() });
   } catch (_) {
-    runPm2(['start', getBashPath(), '--name', name, '--', scriptPath], {
+    runPm2(['start', getBashPath(), '--name', name, ...restartOpts, '--', scriptPath], {
       env: pm2Env({ PORT: String(app.port) }),
     });
+    pm2Save();
     return;
   }
   runPm2(['start', name], { env: pm2Env() });
+  pm2Save();
 }
 
 export function stopApp(app) {
@@ -277,6 +300,7 @@ export function stopApp(app) {
   } catch (e) {
     if (!e.message?.includes('not found')) throw e;
   }
+  pm2Save();
 }
 
 export function restartApp(app) {
@@ -287,6 +311,18 @@ export function restartApp(app) {
     if (e.message?.includes('not found')) startApp(app);
     else throw e;
   }
+  pm2Save();
+}
+
+export function reloadApp(app) {
+  const name = pm2Name(app);
+  try {
+    runPm2(['reload', name], { env: pm2Env() });
+  } catch (e) {
+    if (e.message?.includes('not found')) startApp(app);
+    else throw e;
+  }
+  pm2Save();
 }
 
 export function deleteFromPm2(app) {
@@ -294,6 +330,7 @@ export function deleteFromPm2(app) {
   try {
     runPm2(['delete', name], { env: pm2Env() });
   } catch (_) {}
+  pm2Save();
 }
 
 export function getPm2Status(app) {
@@ -303,7 +340,11 @@ export function getPm2Status(app) {
     const list = JSON.parse(stdout);
     const proc = list.find((p) => p.name === name);
     if (!proc) return { status: 'stopped' };
-    return { status: proc.pm2_env?.status === 'online' ? 'running' : 'stopped' };
+    const status = proc.pm2_env?.status === 'online' ? 'running' : 'stopped';
+    const monit = proc.monit || {};
+    const memory = typeof monit.memory === 'number' ? monit.memory : undefined;
+    const cpu = typeof monit.cpu === 'number' ? monit.cpu : undefined;
+    return { status, memory, cpu };
   } catch (e) {
     return { status: 'unknown', error: e?.message || 'Could not determine status' };
   }
@@ -317,6 +358,28 @@ export function getLogs(app, lines = 100) {
   } catch (e) {
     return e.stdout || e.message || 'No logs';
   }
+}
+
+/**
+ * Stream live logs from PM2. Returns the child process so the caller can kill it on client disconnect.
+ * onChunk receives string chunks (stdout + stderr combined).
+ */
+export function streamLogs(app, onChunk) {
+  const name = pm2Name(app);
+  const env = pm2Env();
+  const child = spawn(PM2_BIN, ['logs', name, '--raw'], {
+    env: { ...process.env, ...env },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const onData = (data) => {
+    if (data && typeof onChunk === 'function') onChunk(data.toString());
+  };
+  child.stdout.on('data', onData);
+  child.stderr.on('data', onData);
+  child.on('error', (err) => {
+    if (typeof onChunk === 'function') onChunk(`\n[stream error: ${err.message}]\n`);
+  });
+  return child;
 }
 
 /**

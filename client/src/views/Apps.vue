@@ -240,6 +240,13 @@
           </div>
           <p class="form-hint">Requires a domain and server reachable on ports 80 and 443.</p>
         </div>
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input v-model="form.start_after_deploy" type="checkbox" />
+            <span>Start app after deploy</span>
+          </label>
+          <p class="form-hint">When unchecked, the app is created but not started (e.g. to edit .env first).</p>
+        </div>
         <div class="action-btns" style="margin-top:1rem;">
           <button type="submit" class="btn btn-primary" :disabled="creating">Create app</button>
           <button type="button" class="btn" @click="closeForm" :disabled="creating">Cancel</button>
@@ -281,6 +288,7 @@
               <th>Size</th>
               <th>SSL</th>
               <th>Status</th>
+              <th>CPU / Memory</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -296,6 +304,14 @@
                 <span v-else class="ssl-off">—</span>
               </td>
               <td><span class="badge" :class="app.status === 'running' ? 'badge-success' : (app.status === 'unknown' ? 'badge-warn' : 'badge-muted')" :title="app.status_error ? (app.status + ': ' + app.status_error) : app.status">{{ app.status }}</span></td>
+              <td class="app-metrics-cell">
+                <span v-if="app.status === 'running' && (app.cpu != null || app.memory != null)" class="app-metrics">
+                  <span v-if="app.cpu != null">CPU {{ formatCpu(app.cpu) }}</span>
+                  <span v-if="app.cpu != null && app.memory != null"> · </span>
+                  <span v-if="app.memory != null">{{ formatMemory(app.memory) }}</span>
+                </span>
+                <span v-else class="text-muted">—</span>
+              </td>
               <td>
                 <div class="list-actions">
                   <router-link :to="`/apps/${app.id}`" class="btn btn-sm">Open</router-link>
@@ -475,6 +491,7 @@ const DEFAULT_FORM = {
   start_cmd: 'npm start',
   domain: '',
   ssl_enabled: false,
+  start_after_deploy: true,
 };
 
 const form = ref({ ...DEFAULT_FORM });
@@ -543,6 +560,20 @@ function formatSize(bytes) {
   const k = 1024;
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${(bytes / Math.pow(k, i)).toFixed(i <= 1 ? 0 : 1)} ${units[i]}`;
+}
+
+function formatCpu(cpu) {
+  if (cpu == null) return '—';
+  return `${Number(cpu).toFixed(1)}%`;
+}
+
+function formatMemory(bytes) {
+  if (bytes == null) return '—';
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), units.length - 1);
   return `${(bytes / Math.pow(k, i)).toFixed(i <= 1 ? 0 : 1)} ${units[i]}`;
 }
 
@@ -743,6 +774,7 @@ const stepLabels = {
   nginx_done: 'Nginx configured',
   start: 'Starting app…',
   start_done: 'App started',
+  start_skipped: 'Skipped start',
 };
 
 const stepProgress = {
@@ -760,6 +792,7 @@ const stepProgress = {
   nginx_done: 80,
   start: 90,
   start_done: 100,
+  start_skipped: 100,
 };
 
 function appendLogs(logs, stdout, stderr) {
@@ -808,13 +841,17 @@ async function create() {
       fd.append('node_version', form.value.node_version || '20');
       fd.append('domain', form.value.domain || '');
       fd.append('ssl_enabled', form.value.ssl_enabled ? '1' : '0');
+      fd.append('start_after_deploy', form.value.start_after_deploy !== false ? '1' : '0');
       result = await api.apps.createFromZipWithProgress(fd, handleCreateEvent);
     } else {
       if (!form.value.repo_url || !form.value.repo_url.trim()) {
         createError.value = 'Repository URL is required';
         return;
       }
-      result = await api.apps.createWithProgress(form.value, handleCreateEvent);
+      result = await api.apps.createWithProgress(
+        { ...form.value, start_after_deploy: form.value.start_after_deploy !== false },
+        handleCreateEvent
+      );
     }
     creationSslWarning.value = result.sslWarning || '';
     showForm.value = false;

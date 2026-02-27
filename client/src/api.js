@@ -176,13 +176,58 @@ export const api = {
     start: (id) => request(`/api/apps/${id}/start`, { method: 'POST' }),
     stop: (id) => request(`/api/apps/${id}/stop`, { method: 'POST' }),
     restart: (id) => request(`/api/apps/${id}/restart`, { method: 'POST' }),
+    reload: (id) => request(`/api/apps/${id}/reload`, { method: 'POST' }),
     install: (id) => request(`/api/apps/${id}/install`, { method: 'POST' }),
     build: (id) => request(`/api/apps/${id}/build`, { method: 'POST' }),
     pull: (id, body) => request(`/api/apps/${id}/pull`, { method: 'POST', body: JSON.stringify(body || {}) }),
     redeploy: (id, body) => request(`/api/apps/${id}/redeploy`, { method: 'POST', body: JSON.stringify(body || {}) }),
     logs: (id, lines) => request(`/api/apps/${id}/logs?lines=${lines || 100}`),
+    /**
+     * Stream live logs via SSE. Calls onChunk(text) for each chunk. Returns { close() } to stop.
+     */
+    logsStream(id, { onChunk, onError }) {
+      const ac = new AbortController();
+      const url = `${base}/api/apps/${id}/logs/stream`;
+      fetch(url, { credentials: 'include', signal: ac.signal })
+        .then(async (res) => {
+          if (!res.ok) {
+            const t = await res.text();
+            let err = t;
+            try {
+              const j = JSON.parse(t);
+              if (j.error) err = j.error;
+            } catch (_) {}
+            if (onError) onError(new Error(err));
+            return;
+          }
+          const reader = res.body.getReader();
+          const dec = new TextDecoder();
+          let buf = '';
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buf += dec.decode(value, { stream: true });
+            const events = buf.split('\n\n');
+            buf = events.pop() || '';
+            for (const ev of events) {
+              const lines = ev.split('\n').filter((l) => l.startsWith('data: '));
+              const text = lines.map((l) => l.slice(6).replace(/^data: /, '')).join('\n');
+              if (text && onChunk) onChunk(text);
+            }
+          }
+        })
+        .catch((err) => {
+          if (err.name !== 'AbortError' && onError) onError(err);
+        });
+      return {
+        close() {
+          ac.abort();
+        },
+      };
+    },
     env: (id) => request(`/api/apps/${id}/env`),
     updateEnv: (id, env) => request(`/api/apps/${id}/env`, { method: 'PUT', body: JSON.stringify({ env }) }),
+    envAndRestart: (id, env) => request(`/api/apps/${id}/env-and-restart`, { method: 'POST', body: JSON.stringify({ env }) }),
     files: {
       list: (id, dirPath) => request(`/api/apps/${id}/files?path=${encodeURIComponent(dirPath || '')}`),
       getContent: (id, filePath) => request(`/api/apps/${id}/files/content?path=${encodeURIComponent(filePath)}`),

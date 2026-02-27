@@ -10,6 +10,11 @@
             <span class="status-pill__dot"></span>
             {{ app.status }}
           </span>
+          <span v-if="app.status === 'running' && (app.cpu != null || app.memory != null)" class="app-detail-metrics">
+            <span v-if="app.cpu != null">CPU {{ formatCpu(app.cpu) }}</span>
+            <span v-if="app.cpu != null && app.memory != null"> · </span>
+            <span v-if="app.memory != null">{{ formatMemory(app.memory) }}</span>
+          </span>
         </div>
         <div class="app-detail-actions">
           <button type="button" class="btn" :class="{ 'btn--busy': busyStart }" @click="doStart" :disabled="app.status === 'running' || saving || busyStart" title="Run">
@@ -26,6 +31,11 @@
             <span v-if="busyRestart" class="btn-spinner btn-spinner--lg" aria-hidden="true"></span>
             <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
             {{ busyRestart ? 'Restarting…' : 'Restart' }}
+          </button>
+          <button type="button" class="btn" :class="{ 'btn--busy': busyReloadApp }" @click="doReload" :disabled="app.status !== 'running' || saving || busyReloadApp" title="Zero-downtime reload">
+            <span v-if="busyReloadApp" class="btn-spinner btn-spinner--lg" aria-hidden="true"></span>
+            <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+            {{ busyReloadApp ? 'Reloading…' : 'Reload' }}
           </button>
           <button type="button" class="btn btn-danger" @click="confirmDelete" :disabled="saving" title="Delete">Delete</button>
         </div>
@@ -122,6 +132,19 @@
                 <label>Start command</label>
                 <input v-model="edit.start_cmd" type="text" placeholder="npm start" />
               </div>
+              <p class="card__muted card__muted--small">Start command and Node version apply on next start or restart.</p>
+              <div class="form-row form-row--2">
+                <div class="form-group">
+                  <label>Max restarts</label>
+                  <input v-model.number="edit.max_restarts" type="number" min="0" max="999999" placeholder="Default" step="1" />
+                  <p class="form-hint">Optional. PM2 will stop restarting after this many restarts (0–999999). Empty = default.</p>
+                </div>
+                <div class="form-group">
+                  <label>Restart delay (ms)</label>
+                  <input v-model.number="edit.restart_delay" type="number" min="0" max="600000" placeholder="Default" step="1" />
+                  <p class="form-hint">Optional. Delay between restarts in ms (0–600000). Empty = default.</p>
+                </div>
+              </div>
               <button type="submit" class="btn btn-primary" :disabled="saving">{{ saving ? 'Saving…' : 'Save' }}</button>
             </fieldset>
           </form>
@@ -129,6 +152,12 @@
         <section v-if="!isUploadApp" class="card">
           <h2 class="card__title">Update from repo</h2>
           <p class="card__muted">Pull latest from the repo. Save first if you changed the branch above. Redeploy also runs install, build, and restart.</p>
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input v-model="startAfterRedeploy" type="checkbox" />
+              <span>Start app after redeploy</span>
+            </label>
+          </div>
           <div class="action-btns">
             <button type="button" class="btn" @click="doPull" :disabled="busyPull || busyRedeploy || saving">{{ busyPull ? 'Pulling…' : 'Update from repo' }}</button>
             <button type="button" class="btn btn-primary" @click="doRedeploy" :disabled="busyPull || busyRedeploy || saving">{{ busyRedeploy ? 'Redeploying…' : 'Redeploy' }}</button>
@@ -235,10 +264,11 @@
       <div v-show="activeTab === 'env'" class="detail-tab-panel" role="tabpanel">
         <section class="card">
           <h2 class="card__title">Environment (.env)</h2>
-          <p class="card__muted">Variables for this app. Restart the app for changes to take effect.</p>
+          <p class="card__muted">Variables for this app. Restart the app to apply .env changes.</p>
           <textarea v-model="envContent" class="env-editor" placeholder="NODE_ENV=production&#10;PORT=3000" rows="10" spellcheck="false" :disabled="saving" />
           <div class="action-btns">
             <button type="button" class="btn btn-primary" @click="saveEnv" :disabled="savingEnv || saving">{{ savingEnv ? 'Saving…' : 'Save .env' }}</button>
+            <button type="button" class="btn" @click="saveEnvAndRestart" :disabled="savingEnv || saving || busySaveAndRestart">{{ busySaveAndRestart ? 'Saving and restarting…' : 'Save and restart app' }}</button>
             <button type="button" class="btn" @click="loadEnv(true)" :disabled="saving || busyReload">{{ busyReload ? 'Reloading…' : 'Reload' }}</button>
           </div>
           <p v-if="envError" class="card__error">{{ envError }}</p>
@@ -250,10 +280,12 @@
           <div class="logs-header">
             <h2 class="card__title">Logs</h2>
             <div class="logs-actions">
+              <button type="button" class="btn btn-sm" :class="{ 'btn-primary': logsLive }" @click="toggleLogsLive" :disabled="saving">{{ logsLive ? 'Stop live' : 'Live' }}</button>
               <button type="button" class="btn btn-sm" @click="copyLogs" :disabled="!logs">Copy</button>
               <button type="button" class="btn btn-sm" @click="loadLogs" :disabled="saving">Refresh</button>
             </div>
           </div>
+          <p v-if="logsLive" class="card__muted card__muted--small">Streaming logs. Click Stop live or switch tab to stop.</p>
           <pre ref="logsPre" class="logs">{{ logs }}</pre>
         </section>
       </div>
@@ -355,14 +387,14 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api } from '../api';
 
 const route = useRoute();
 const router = useRouter();
 const app = ref(null);
-const edit = ref({ domain: '', ssl_enabled: false, branch: '', node_version: '', install_cmd: '', build_cmd: '', start_cmd: '' });
+const edit = ref({ domain: '', ssl_enabled: false, branch: '', node_version: '', install_cmd: '', build_cmd: '', start_cmd: '', max_restarts: '', restart_delay: '' });
 const nodeVersions = ref([]);
 const nodeVersionOptions = computed(() => {
   const list = [...nodeVersions.value];
@@ -373,6 +405,8 @@ const nodeVersionOptions = computed(() => {
 const isUploadApp = computed(() => app.value && String(app.value.repo_url || '') === 'upload://');
 const serverIp = ref('');
 const logs = ref('');
+const logsLive = ref(false);
+let logsStreamController = null;
 const saving = ref(false);
 const showDeleteModal = ref(false);
 const deleting = ref(false);
@@ -385,10 +419,13 @@ const busyInstall = ref(false);
 const busyBuild = ref(false);
 const busyPull = ref(false);
 const busyRedeploy = ref(false);
+const startAfterRedeploy = ref(true);
 const busyStart = ref(false);
 const busyStop = ref(false);
 const busyRestart = ref(false);
 const busyReload = ref(false);
+const busyReloadApp = ref(false);
+const busySaveAndRestart = ref(false);
 const busy = computed(() => busyInstall.value || busyBuild.value);
 const logsPre = ref(null);
 
@@ -466,7 +503,8 @@ function getTabDirty(tabId) {
     const e = edit.value;
     const b = editBaseline.value;
     return e.domain !== b.domain || e.ssl_enabled !== b.ssl_enabled || e.branch !== b.branch ||
-      e.node_version !== b.node_version || e.install_cmd !== b.install_cmd || e.build_cmd !== b.build_cmd || e.start_cmd !== b.start_cmd;
+      e.node_version !== b.node_version || e.install_cmd !== b.install_cmd || e.build_cmd !== b.build_cmd || e.start_cmd !== b.start_cmd ||
+      e.max_restarts !== b.max_restarts || e.restart_delay !== b.restart_delay;
   }
   if (tabId === 'env') return envContent.value !== lastLoadedEnvContent.value;
   if (tabId === 'files') return fileExplorerModal.value === 'edit' && fileExplorerContent.value !== fileExplorerContentOriginal.value;
@@ -531,6 +569,20 @@ function formatSize(bytes) {
   return `${(bytes / Math.pow(k, i)).toFixed(i <= 1 ? 0 : 1)} ${units[i]}`;
 }
 
+function formatCpu(cpu) {
+  if (cpu == null) return '—';
+  return `${Number(cpu).toFixed(1)}%`;
+}
+
+function formatMemory(bytes) {
+  if (bytes == null) return '—';
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), units.length - 1);
+  return `${(bytes / Math.pow(k, i)).toFixed(i <= 1 ? 0 : 1)} ${units[i]}`;
+}
+
 function setFeedback(type, message) {
   showToast(type, message);
 }
@@ -569,6 +621,22 @@ async function saveEnv() {
   }
 }
 
+async function saveEnvAndRestart() {
+  busySaveAndRestart.value = true;
+  envError.value = '';
+  try {
+    await api.apps.envAndRestart(route.params.id, envContent.value);
+    lastLoadedEnvContent.value = envContent.value;
+    setFeedback('success', '.env saved and app restarted.');
+    await load();
+  } catch (e) {
+    envError.value = e.message || 'Failed to save and restart';
+    setFeedback('error', e.message || 'Failed to save and restart');
+  } finally {
+    busySaveAndRestart.value = false;
+  }
+}
+
 async function load() {
   loadError.value = '';
   try {
@@ -588,6 +656,8 @@ async function load() {
       install_cmd: appRes.install_cmd || '',
       build_cmd: appRes.build_cmd || '',
       start_cmd: appRes.start_cmd || '',
+      max_restarts: appRes.max_restarts ?? '',
+      restart_delay: appRes.restart_delay ?? '',
     };
     editBaseline.value = { ...edit.value };
   } catch (e) {
@@ -606,6 +676,37 @@ async function loadLogs() {
     logs.value = 'Failed to load logs';
     setFeedback('error', 'Failed to load logs.');
   }
+}
+
+const LOGS_LIVE_MAX_LINES = 2000;
+
+function toggleLogsLive() {
+  if (logsLive.value) {
+    if (logsStreamController) {
+      logsStreamController.close();
+      logsStreamController = null;
+    }
+    logsLive.value = false;
+    return;
+  }
+  logsLive.value = true;
+  logsStreamController = api.apps.logsStream(route.params.id, {
+    onChunk(text) {
+      if (!logsLive.value) return;
+      const lines = (logs.value || '').split('\n');
+      const newLines = text.trim().split('\n').filter(Boolean);
+      const combined = [...lines, ...newLines];
+      if (combined.length > LOGS_LIVE_MAX_LINES) {
+        combined.splice(0, combined.length - LOGS_LIVE_MAX_LINES);
+      }
+      logs.value = combined.join('\n') || 'Streaming…';
+    },
+    onError(err) {
+      logsLive.value = false;
+      logsStreamController = null;
+      setFeedback('error', err.message || 'Log stream failed.');
+    },
+  });
 }
 
 async function copyLogs() {
@@ -862,6 +963,24 @@ watch([() => app.value, fileExplorerPath], () => {
   if (app.value && app.value.size != null) loadFileList();
 }, { immediate: true });
 
+watch(activeTab, (tab) => {
+  if (tab !== 'logs' && logsLive.value) {
+    if (logsStreamController) {
+      logsStreamController.close();
+      logsStreamController = null;
+    }
+    logsLive.value = false;
+  }
+});
+
+onBeforeUnmount(() => {
+  if (logsStreamController) {
+    logsStreamController.close();
+    logsStreamController = null;
+  }
+  logsLive.value = false;
+});
+
 async function doStart() {
   busyStart.value = true;
   try {
@@ -901,10 +1020,28 @@ async function doRestart() {
   }
 }
 
+async function doReload() {
+  busyReloadApp.value = true;
+  try {
+    await api.apps.reload(route.params.id);
+    app.value = await api.apps.get(route.params.id);
+    setFeedback('success', 'App reloaded.');
+  } catch (e) {
+    setFeedback('error', e.message || 'Reload failed.');
+  } finally {
+    busyReloadApp.value = false;
+  }
+}
+
 async function save() {
   saving.value = true;
   try {
-    const updated = await api.apps.update(route.params.id, edit.value);
+    const payload = {
+      ...edit.value,
+      max_restarts: edit.value.max_restarts === '' || edit.value.max_restarts == null ? null : Number(edit.value.max_restarts),
+      restart_delay: edit.value.restart_delay === '' || edit.value.restart_delay == null ? null : Number(edit.value.restart_delay),
+    };
+    const updated = await api.apps.update(route.params.id, payload);
     app.value = updated;
     edit.value = {
       domain: updated.domain || '',
@@ -914,6 +1051,8 @@ async function save() {
       install_cmd: updated.install_cmd || '',
       build_cmd: updated.build_cmd || '',
       start_cmd: updated.start_cmd || '',
+      max_restarts: updated.max_restarts ?? '',
+      restart_delay: updated.restart_delay ?? '',
     };
     editBaseline.value = { ...edit.value };
     setFeedback('success', 'Settings saved.');
@@ -970,7 +1109,8 @@ async function doPull() {
 async function doRedeploy() {
   busyRedeploy.value = true;
   try {
-    const updated = await api.apps.redeploy(route.params.id, pullBody());
+    const body = { ...pullBody(), start_after: startAfterRedeploy.value };
+    const updated = await api.apps.redeploy(route.params.id, body);
     app.value = updated;
     edit.value.branch = updated.branch ?? '';
     if (updated.deploy_warning) {
@@ -1147,6 +1287,11 @@ async function doDelete() {
 }
 .status-pill--unknown .status-pill__dot {
   background: var(--warn, #ca8a04);
+}
+.app-detail-metrics {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin-left: 0.5rem;
 }
 .app-detail-actions {
   display: flex;

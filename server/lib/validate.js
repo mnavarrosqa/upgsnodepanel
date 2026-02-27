@@ -141,5 +141,27 @@ export function validateAppInput(data, isCreate = false) {
   }
   if (data.node_version !== undefined) out.node_version = validateNodeVersion(data.node_version);
   if (data.ssl_enabled !== undefined) out.ssl_enabled = Boolean(data.ssl_enabled);
+  if (data.max_restarts !== undefined) out.max_restarts = data.max_restarts === null ? null : validateMaxRestarts(data.max_restarts);
+  if (data.restart_delay !== undefined) out.restart_delay = data.restart_delay === null ? null : validateRestartDelay(data.restart_delay);
   return out;
+}
+
+/** Optional max restarts (0–999999). Empty/null => undefined. */
+export function validateMaxRestarts(v) {
+  if (v === null || v === undefined || v === '') return undefined;
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 0 || n > 999999) {
+    throw new Error('max_restarts must be an integer between 0 and 999999');
+  }
+  return n;
+}
+
+/** Optional restart delay in ms (0–600000). Empty/null => undefined. */
+export function validateRestartDelay(v) {
+  if (v === null || v === undefined || v === '') return undefined;
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 0 || n > 600000) {
+    throw new Error('restart_delay must be an integer between 0 and 600000 (ms)');
+  }
+  return n;
 }

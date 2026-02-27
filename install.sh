@@ -85,6 +85,17 @@ done
 mkdir -p "$PM2_HOME"
 chown -R "$PANEL_USER:$PANEL_USER" "$PM2_HOME"
 
+# Register PM2 to start on server boot so managed apps are restored after reboot
+echo "[*] Configuring PM2 to start on boot..."
+PM2_STARTUP_OUT=$(sudo -u "$PANEL_USER" env HOME="$PANEL_HOME" PM2_HOME="$PM2_HOME" pm2 startup systemd -u "$PANEL_USER" --hp "$PANEL_HOME" 2>&1) || true
+if echo "$PM2_STARTUP_OUT" | grep -q 'sudo'; then
+  PM2_SUDO_CMD=$(echo "$PM2_STARTUP_OUT" | grep -E '^sudo ' | tail -1)
+  if [ -n "$PM2_SUDO_CMD" ]; then
+    eval "$PM2_SUDO_CMD" 2>/dev/null || true
+  fi
+fi
+sudo -u "$PANEL_USER" env HOME="$PANEL_HOME" PM2_HOME="$PM2_HOME" pm2 save --no-update-env 2>/dev/null || true
+
 echo "[*] Installing panel to $INSTALL_DIR..."
 mkdir -p "$(dirname "$INSTALL_DIR")"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

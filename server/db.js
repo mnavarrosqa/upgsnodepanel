@@ -60,6 +60,16 @@ function initSchema(database) {
 export function initDb() {
   const database = getDb();
   initSchema(database);
+  try {
+    database.prepare('ALTER TABLE apps ADD COLUMN max_restarts INTEGER').run();
+  } catch (e) {
+    if (!e.message?.includes('duplicate column')) throw e;
+  }
+  try {
+    database.prepare('ALTER TABLE apps ADD COLUMN restart_delay INTEGER').run();
+  } catch (e) {
+    if (!e.message?.includes('duplicate column')) throw e;
+  }
   return database;
 }
 
@@ -103,8 +113,8 @@ export function createApp(data) {
   initSchema(database);
   const port = data.port ?? getAvailablePort();
   const stmt = database.prepare(`
-    INSERT INTO apps (name, repo_url, branch, install_cmd, build_cmd, start_cmd, node_version, port, domain, ssl_enabled)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO apps (name, repo_url, branch, install_cmd, build_cmd, start_cmd, node_version, port, domain, ssl_enabled, max_restarts, restart_delay)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const branchVal = (data.branch != null && data.branch !== '') ? data.branch : null;
   const result = stmt.run(
@@ -117,14 +127,16 @@ export function createApp(data) {
     data.node_version || '20',
     port,
     data.domain || null,
-    data.ssl_enabled ? 1 : 0
+    data.ssl_enabled ? 1 : 0,
+    data.max_restarts ?? null,
+    data.restart_delay ?? null
   );
   return getApp(result.lastInsertRowid);
 }
 
 export function updateApp(id, data) {
   const database = getDb();
-  const allowed = ['name', 'repo_url', 'branch', 'install_cmd', 'build_cmd', 'start_cmd', 'node_version', 'domain', 'ssl_enabled'];
+  const allowed = ['name', 'repo_url', 'branch', 'install_cmd', 'build_cmd', 'start_cmd', 'node_version', 'domain', 'ssl_enabled', 'max_restarts', 'restart_delay'];
   const updates = [];
   const values = [];
   for (const key of allowed) {

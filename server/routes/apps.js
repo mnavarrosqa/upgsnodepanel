@@ -8,7 +8,7 @@ import AdmZip from 'adm-zip';
 import * as db from '../db.js';
 import * as appManager from '../services/appManager.js';
 import * as nginx from '../services/nginx.js';
-import { validateAppInput, validateName, validateDomain, validateCommand, validateNodeVersion, validateRepoUrl, validateRef } from '../lib/validate.js';
+import { validateAppInput, validateName, validateDomain, validateCommand, validateNodeVersion, validateRepoUrl, validateRef, validateMaxRestarts, validateRestartDelay } from '../lib/validate.js';
 
 export const appsRouter = Router();
 
@@ -47,6 +47,8 @@ function appToJson(row) {
     ssl_active: sslActive,
     status: pm2.status,
     status_error: pm2.error || undefined,
+    memory: pm2.memory,
+    cpu: pm2.cpu,
     size: appManager.getAppSize(row),
   };
 }
@@ -101,7 +103,7 @@ function flushStream() {
 function buildCreateDataFromBody(body, isZip = false) {
   const name = validateName(body.name);
   if (!name) throw new Error('name is required');
-  return {
+  const data = {
     name,
     repo_url: isZip ? 'upload://' : (validateRepoUrl(body.repo_url) || (() => { throw new Error('repo_url is required'); })()),
     branch: body.branch != null && String(body.branch).trim() !== '' ? validateRef(body.branch) : null,
@@ -112,6 +114,13 @@ function buildCreateDataFromBody(body, isZip = false) {
     domain: validateDomain(body.domain) || null,
     ssl_enabled: body.ssl_enabled === '1' || body.ssl_enabled === true,
   };
+  try {
+    if (body.max_restarts !== undefined && body.max_restarts !== '' && body.max_restarts !== null) data.max_restarts = validateMaxRestarts(body.max_restarts);
+  } catch (_) {}
+  try {
+    if (body.restart_delay !== undefined && body.restart_delay !== '' && body.restart_delay !== null) data.restart_delay = validateRestartDelay(body.restart_delay);
+  } catch (_) {}
+  return data;
 }
 
 appsRouter.post('/from-zip', upload.single('zip'), async (req, res, next) => {
@@ -128,6 +137,7 @@ appsRouter.post('/from-zip', upload.single('zip'), async (req, res, next) => {
     } catch (e) {
       return res.status(400).json({ error: e.message || 'Validation failed' });
     }
+    const startAfterDeploy = body.start_after_deploy !== false && body.start_after_deploy !== '0';
     const app = db.createApp(createData);
     const send = stream
       ? async (obj) => {
@@ -160,9 +170,13 @@ appsRouter.post('/from-zip', upload.single('zip'), async (req, res, next) => {
         if (app.ssl_enabled) await send({ step: 'ssl_done', message: nginxResult.sslError ? 'SSL certificate could not be obtained' : 'SSL ready', sslError: nginxResult.sslError });
         await send({ step: 'nginx_done' });
       }
-      await send({ step: 'start', message: 'Starting app…' });
-      appManager.startApp(app);
-      await send({ step: 'start_done' });
+      if (startAfterDeploy) {
+        await send({ step: 'start', message: 'Starting app…' });
+        appManager.startApp(app);
+        await send({ step: 'start_done' });
+      } else {
+        await send({ step: 'start_skipped', message: 'Skipped start (start after deploy disabled)' });
+      }
       const finalApp = appToJson(db.getApp(app.id));
       try {
         db.addActivity(finalApp.id, finalApp.name, 'created');
@@ -218,10 +232,13 @@ appsRouter.post('/', async (req, res, next) => {
         node_version: validated.node_version ?? '20',
         domain: validated.domain ?? null,
         ssl_enabled: validated.ssl_enabled ?? false,
+        max_restarts: validated.max_restarts,
+        restart_delay: validated.restart_delay,
       };
     } catch (e) {
       return res.status(400).json({ error: e.message || 'Validation failed' });
     }
+    const startAfterDeploy = req.body?.start_after_deploy !== false;
     const app = db.createApp(createData);
     const send = stream
       ? async (obj) => {
@@ -262,9 +279,13 @@ appsRouter.post('/', async (req, res, next) => {
         await send({ step: 'nginx_done' });
       }
 
-      await send({ step: 'start', message: 'Starting app…' });
-      appManager.startApp(app);
-      await send({ step: 'start_done' });
+      if (startAfterDeploy) {
+        await send({ step: 'start', message: 'Starting app…' });
+        appManager.startApp(app);
+        await send({ step: 'start_done' });
+      } else {
+        await send({ step: 'start_skipped', message: 'Skipped start (start after deploy disabled)' });
+      }
 
       const finalApp = appToJson(db.getApp(app.id));
       try {
@@ -422,6 +443,24 @@ appsRouter.post('/:id/restart', (req, res, next) => {
   }
 });
 
+appsRouter.post('/:id/reload', (req, res, next) => {
+  try {
+    const app = db.getApp(req.params.id);
+    if (!app) return res.status(404).json({ error: 'App not found' });
+    appManager.withAppAction(app.id, () => {
+      appManager.reloadApp(app);
+    });
+    try {
+      db.addActivity(app.id, app.name, 'reloaded');
+    } catch (_) {}
+    const pm2 = appManager.getPm2Status(app);
+    res.json({ status: pm2.status, status_error: pm2.error || undefined });
+  } catch (e) {
+    if (e.code === 'APP_ACTION_BUSY') return res.status(409).json({ error: e.message });
+    res.status(500).json({ error: e.message });
+  }
+});
+
 appsRouter.post('/:id/install', (req, res, next) => {
   try {
     const app = db.getApp(req.params.id);
@@ -466,6 +505,7 @@ appsRouter.post('/:id/redeploy', (req, res, next) => {
   try {
     const app = db.getApp(req.params.id);
     if (!app) return res.status(404).json({ error: 'App not found' });
+    const startAfter = req.body?.start_after !== false;
     const branch = req.body && req.body.branch !== undefined ? (req.body.branch === '' ? null : String(req.body.branch).trim()) : undefined;
     let current = branch !== undefined ? db.updateApp(app.id, { branch: branch || null }) : app;
     current = db.getApp(current.id);
@@ -475,13 +515,15 @@ appsRouter.post('/:id/redeploy', (req, res, next) => {
     const installOut = appManager.runInstall(current);
     if (current.build_cmd) appManager.runBuild(current);
     let deployWarning = null;
-    try {
-      appManager.restartApp(current);
-    } catch (e) {
+    if (startAfter) {
       try {
-        appManager.startApp(current);
-      } catch (e2) {
-        deployWarning = 'Deployed but app could not be started: ' + (e2.message || 'unknown');
+        appManager.restartApp(current);
+      } catch (e) {
+        try {
+          appManager.startApp(current);
+        } catch (e2) {
+          deployWarning = 'Deployed but app could not be started: ' + (e2.message || 'unknown');
+        }
       }
     }
     const finalApp = appToJson(db.getApp(current.id));
@@ -504,6 +546,34 @@ appsRouter.get('/:id/logs', (req, res, next) => {
   }
 });
 
+appsRouter.get('/:id/logs/stream', (req, res, next) => {
+  try {
+    const app = db.getApp(req.params.id);
+    if (!app) return res.status(404).json({ error: 'App not found' });
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders && res.flushHeaders();
+    const child = appManager.streamLogs(app, (chunk) => {
+      if (res.writableEnded) return;
+      const escaped = String(chunk).replace(/\n/g, '\ndata: ').trim();
+      if (escaped) res.write('data: ' + escaped + '\n\n');
+    });
+    req.on('close', () => {
+      try {
+        child.kill('SIGTERM');
+      } catch (_) {}
+    });
+    child.on('exit', () => {
+      if (!res.writableEnded) res.end();
+    });
+  } catch (e) {
+    if (!res.headersSent) next(e);
+    else try { res.end(); } catch (_) {}
+  }
+});
+
 appsRouter.get('/:id/env', (req, res, next) => {
   try {
     const app = db.getApp(req.params.id);
@@ -523,6 +593,31 @@ appsRouter.put('/:id/env', (req, res, next) => {
     appManager.writeAppEnv(app, content);
     res.json({ ok: true });
   } catch (e) {
+    next(e);
+  }
+});
+
+appsRouter.post('/:id/env-and-restart', (req, res, next) => {
+  try {
+    const app = db.getApp(req.params.id);
+    if (!app) return res.status(404).json({ error: 'App not found' });
+    const content = req.body && typeof req.body.env === 'string' ? req.body.env : '';
+    appManager.writeAppEnv(app, content);
+    appManager.withAppAction(app.id, () => {
+      const pm2 = appManager.getPm2Status(app);
+      if (pm2.status === 'running') {
+        appManager.restartApp(app);
+      } else {
+        appManager.startApp(app);
+      }
+    });
+    try {
+      db.addActivity(app.id, app.name, 'restarted');
+    } catch (_) {}
+    const pm2 = appManager.getPm2Status(app);
+    res.json({ ok: true, status: pm2.status, status_error: pm2.error || undefined });
+  } catch (e) {
+    if (e.code === 'APP_ACTION_BUSY') return res.status(409).json({ error: e.message });
     next(e);
   }
 });
