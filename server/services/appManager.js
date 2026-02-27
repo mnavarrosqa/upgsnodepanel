@@ -283,12 +283,16 @@ export function setupNginxAndReload(app) {
   if (app.ssl_enabled && !certsExist(domain)) {
     try {
       obtainCert(domain);
+      // Cert just obtained; write SSL vhost even if certsExist() is false (e.g. panel user cannot read /etc/letsencrypt)
+      writeAppConfig(app, false, true);
     } catch (e) {
       console.warn('Could not obtain SSL cert for', domain, e.message);
       sslError = e.message || 'Could not obtain certificate';
+      writeAppConfig(app);
     }
+  } else {
+    writeAppConfig(app);
   }
-  writeAppConfig(app);
   reloadNginx();
   return sslError ? { sslError } : {};
 }

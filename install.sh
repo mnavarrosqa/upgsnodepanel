@@ -215,6 +215,12 @@ if [ "$PANEL_USER" != "root" ]; then
   if ! visudo -c -f "$SUDOERS_FILE" >/dev/null 2>&1; then
     echo "[!] Sudoers file invalid. Removing. Nginx reload and certbot may fail for the panel."
     rm -f "$SUDOERS_FILE"
+  else
+    # So panel uses the same nginx/certbot paths as sudoers (systemd may not have /usr/sbin in PATH)
+    sed -i "s|^NGINX_BIN=.*|NGINX_BIN=$NGINX_BIN_PATH|" .env 2>/dev/null || true
+    grep -q '^NGINX_BIN=' .env 2>/dev/null || echo "NGINX_BIN=$NGINX_BIN_PATH" >> .env
+    sed -i "s|^CERTBOT_BIN=.*|CERTBOT_BIN=$CERTBOT_BIN_PATH|" .env 2>/dev/null || true
+    grep -q '^CERTBOT_BIN=' .env 2>/dev/null || echo "CERTBOT_BIN=$CERTBOT_BIN_PATH" >> .env
   fi
 fi
 

@@ -37,7 +37,12 @@ function keyPath(domain) {
 export function certsExist(domain) {
   if (!domain || typeof domain !== 'string') return false;
   const d = domain.trim();
-  return d.length > 0 && fs.existsSync(certPath(d)) && fs.existsSync(keyPath(d));
+  if (d.length === 0) return false;
+  try {
+    return fs.existsSync(certPath(d)) && fs.existsSync(keyPath(d));
+  } catch {
+    return false;
+  }
 }
 
 /** Extract a short, actionable error message from certbot stdout+stderr (avoids generic "see the logfile" line). */
@@ -81,7 +86,7 @@ export function obtainCert(domain) {
   }
 }
 
-export function writeAppConfig(app, forceHttpOnly = false) {
+export function writeAppConfig(app, forceHttpOnly = false, forceSsl = false) {
   ensureDir();
   const { id, domain, port, ssl_enabled } = app;
   const confPath = appConfPath(id);
@@ -90,10 +95,12 @@ export function writeAppConfig(app, forceHttpOnly = false) {
     return;
   }
   const serverName = domain.trim();
-  const hasSsl = !forceHttpOnly && ssl_enabled && certsExist(serverName);
+  const hasSsl = !forceHttpOnly && ssl_enabled && (forceSsl || certsExist(serverName));
   const comment = `# UPGS Node Panel - app ${id} - ${serverName}\n`;
   let content = '';
   if (hasSsl) {
+    const cert = certPath(serverName);
+    const key = keyPath(serverName);
     content = comment + `
 server {
   listen 80;
@@ -101,10 +108,12 @@ server {
   return 301 https://$host$request_uri;
 }
 server {
-  listen 443 ssl;
+  listen 443 ssl http2;
   server_name ${serverName};
-  ssl_certificate ${certPath(serverName)};
-  ssl_certificate_key ${keyPath(serverName)};
+  ssl_certificate ${cert};
+  ssl_certificate_key ${key};
+  ssl_protocols TLSv1.2 TLSv1.3;
+  ssl_prefer_server_ciphers off;
   location / {
     proxy_pass http://127.0.0.1:${port};
     proxy_http_version 1.1;
@@ -149,9 +158,25 @@ export function removeAppConfig(id) {
 
 export function reloadNginx() {
   try {
-    const prefix = isRoot() ? '' : 'sudo ';
-    run(`${prefix}${NGINX_BIN} -t`, {});
-    run(`${prefix}${NGINX_BIN} -s reload`, {});
+    if (isRoot()) {
+      run(`${NGINX_BIN} -t`, {});
+      run(`${NGINX_BIN} -s reload`, {});
+    } else {
+      const testResult = spawnSync('sudo', [NGINX_BIN, '-t'], { encoding: 'utf-8' });
+      if (testResult.status !== 0) {
+        const err = new Error(testResult.stderr || testResult.stdout || 'nginx -t failed');
+        err.stdout = testResult.stdout;
+        err.stderr = testResult.stderr;
+        throw err;
+      }
+      const reloadResult = spawnSync('sudo', [NGINX_BIN, '-s', 'reload'], { encoding: 'utf-8' });
+      if (reloadResult.status !== 0) {
+        const err = new Error(reloadResult.stderr || reloadResult.stdout || 'nginx reload failed');
+        err.stdout = reloadResult.stdout;
+        err.stderr = reloadResult.stderr;
+        throw err;
+      }
+    }
   } catch (e) {
     console.warn('Nginx reload failed:', e.message);
     throw e;
