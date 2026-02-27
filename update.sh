@@ -37,6 +37,8 @@ if [ -z "$PANEL_HOME" ]; then
 fi
 NVM_DIR="$(grep '^NVM_DIR=' .env 2>/dev/null | cut -d= -f2-)"
 [ -z "$NVM_DIR" ] && NVM_DIR="$PANEL_HOME/.nvm"
+PM2_HOME="$(grep '^PM2_HOME=' .env 2>/dev/null | cut -d= -f2-)"
+[ -z "$PM2_HOME" ] && PM2_HOME="$PANEL_HOME/.pm2"
 
 if ! git remote get-url origin &>/dev/null; then
   echo "[*] Adding remote origin..."
@@ -123,7 +125,12 @@ sudo -u "$PANEL_USER" env HOME="$PANEL_HOME" NVM_DIR="$NVM_DIR" bash -c '
 '
 
 echo "[*] Restarting panel..."
+# Save PM2 process list before restart; after restart the daemon may be gone (same cgroup as panel), so we restore it
+sudo -u "$PANEL_USER" env HOME="$PANEL_HOME" PM2_HOME="$PM2_HOME" pm2 save --no-update-env 2>/dev/null || true
 systemctl restart upgs-node-panel
+sleep 2
+# Restore saved PM2 processes so apps come back without manual start
+sudo -u "$PANEL_USER" env HOME="$PANEL_HOME" PM2_HOME="$PM2_HOME" pm2 resurrect 2>/dev/null || true
 
 echo ""
 echo "UPGS Node Panel updated and restarted."
