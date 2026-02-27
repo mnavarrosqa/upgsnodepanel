@@ -6,8 +6,6 @@ INSTALL_DIR="${INSTALL_DIR:-/opt/upgs-node-panel}"
 PANEL_PORT="${PANEL_PORT:-3000}"
 APPS_BASE_PATH="${APPS_BASE_PATH:-/var/www/upgs-node-apps}"
 NGINX_APPS_CONF_DIR="${NGINX_APPS_CONF_DIR:-/etc/nginx/upgs-node-apps.d}"
-NVM_DIR="${NVM_DIR:-/root/.nvm}"
-PM2_HOME="${PM2_HOME:-/root/.pm2}"
 
 if [ "$(id -u)" -ne 0 ]; then
   echo "Run as root or with sudo."
@@ -24,6 +22,7 @@ if [ -z "$PANEL_HOME" ]; then
     PANEL_HOME="/home/$PANEL_USER"
   fi
 fi
+# Set NVM/PM2 paths from panel user's home (allow env override if set before this script)
 NVM_DIR="${NVM_DIR:-$PANEL_HOME/.nvm}"
 PM2_HOME="${PM2_HOME:-$PANEL_HOME/.pm2}"
 
