@@ -71,6 +71,7 @@ app.use((err, req, res, next) => {
 });
 
 // On startup, write all app vhosts so domain configs are in sync (e.g. after .env path change)
+// Preserve SSL block when the app already has one (panel user may not be able to read /etc/letsencrypt)
 if (isProduction) {
   try {
     const apps = db.listApps();
@@ -78,7 +79,8 @@ if (isProduction) {
     if (withDomain.length > 0) {
       const dir = process.env.NGINX_APPS_CONF_DIR || '/etc/nginx/conf.d';
       for (const a of withDomain) {
-        nginx.writeAppConfig(a);
+        const forceSsl = Boolean(a.ssl_enabled && nginx.appConfigHasSsl(a.id));
+        nginx.writeAppConfig(a, false, forceSsl);
       }
       nginx.reloadNginx();
       console.log(`Nginx: wrote ${withDomain.length} app vhost(s) to ${dir}`);

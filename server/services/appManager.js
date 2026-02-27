@@ -2,7 +2,7 @@ import path from 'path';
 import fs from 'fs';
 import AdmZip from 'adm-zip';
 import { run, runPm2, runGit } from '../lib/exec.js';
-import { writeAppConfig, removeAppConfig, reloadNginx, certsExist, obtainCert } from './nginx.js';
+import { writeAppConfig, removeAppConfig, reloadNginx, certsExist, obtainCert, appConfigHasSsl } from './nginx.js';
 
 const APPS_BASE = process.env.APPS_BASE_PATH || '/var/www/upgs-node-apps';
 const NVM_DIR = process.env.NVM_DIR || `${process.env.HOME || '/root'}/.nvm`;
@@ -281,17 +281,21 @@ export function setupNginxAndReload(app) {
   reloadNginx();
   let sslError = null;
   if (app.ssl_enabled && !certsExist(domain)) {
-    try {
-      obtainCert(domain);
-      // Cert just obtained; write SSL vhost even if certsExist() is false (e.g. panel user cannot read /etc/letsencrypt)
+    if (appConfigHasSsl(app.id)) {
+      // Config already has SSL (e.g. after panel restart); panel user may not read /etc/letsencrypt — just rewrite SSL block
       writeAppConfig(app, false, true);
-    } catch (e) {
-      console.warn('Could not obtain SSL cert for', domain, e.message);
-      sslError = e.message || 'Could not obtain certificate';
-      writeAppConfig(app);
+    } else {
+      try {
+        obtainCert(domain);
+        writeAppConfig(app, false, true);
+      } catch (e) {
+        console.warn('Could not obtain SSL cert for', domain, e.message);
+        sslError = e.message || 'Could not obtain certificate';
+        writeAppConfig(app);
+      }
     }
   } else {
-    writeAppConfig(app);
+    writeAppConfig(app, false, Boolean(app.ssl_enabled && appConfigHasSsl(app.id)));
   }
   reloadNginx();
   return sslError ? { sslError } : {};
