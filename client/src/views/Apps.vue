@@ -13,12 +13,28 @@
       <form @submit.prevent="create">
         <fieldset :disabled="creating">
         <div class="form-group">
-          <label>Name</label>
+          <label>
+            Name
+            <span class="help-wrap">
+              <button type="button" class="help-trigger" aria-label="Help" @mouseenter="onHelpMouseEnter('name')" @mouseleave="onHelpMouseLeave" @click.prevent="onHelpClick('name')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+              </button>
+              <span class="help-tooltip" :class="{ visible: openHelpId === 'name' }">{{ fieldHelp.name }}</span>
+            </span>
+          </label>
           <input v-model="form.name" type="text" required placeholder="my-app" />
         </div>
         <template v-if="sourceType === 'git'">
         <div class="form-group">
-          <label>Repository URL</label>
+          <label>
+            Repository URL
+            <span class="help-wrap">
+              <button type="button" class="help-trigger" aria-label="Help" @mouseenter="onHelpMouseEnter('repo_url')" @mouseleave="onHelpMouseLeave" @click.prevent="onHelpClick('repo_url')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+              </button>
+              <span class="help-tooltip" :class="{ visible: openHelpId === 'repo_url' }">{{ fieldHelp.repo_url }}</span>
+            </span>
+          </label>
           <input
             v-model="form.repo_url"
             type="url"
@@ -28,7 +44,15 @@
           />
         </div>
         <div class="form-group">
-          <label>Branch, tag, or commit</label>
+          <label>
+            Branch, tag, or commit
+            <span class="help-wrap">
+              <button type="button" class="help-trigger" aria-label="Help" @mouseenter="onHelpMouseEnter('branch')" @mouseleave="onHelpMouseLeave" @click.prevent="onHelpClick('branch')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+              </button>
+              <span class="help-tooltip" :class="{ visible: openHelpId === 'branch' }">{{ fieldHelp.branch }}</span>
+            </span>
+          </label>
           <input
             v-model="form.branch"
             type="text"
@@ -39,7 +63,15 @@
           <p v-if="branchDetected" class="domain-check domain-check--ok">{{ branchDetected }}</p>
         </div>
         <div class="form-group">
-          <label>Suggest from repo</label>
+          <label>
+            Suggest from repo
+            <span class="help-wrap">
+              <button type="button" class="help-trigger" aria-label="Help" @mouseenter="onHelpMouseEnter('suggest')" @mouseleave="onHelpMouseLeave" @click.prevent="onHelpClick('suggest')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+              </button>
+              <span class="help-tooltip" :class="{ visible: openHelpId === 'suggest' }">{{ fieldHelp.suggest }}</span>
+            </span>
+          </label>
           <div class="suggest-row">
             <button
               type="button"
@@ -54,19 +86,43 @@
         </div>
         </template>
         <div v-else class="form-group">
-          <label>Project ZIP</label>
+          <label>
+            Project ZIP
+            <span class="help-wrap">
+              <button type="button" class="help-trigger" aria-label="Help" @mouseenter="onHelpMouseEnter('zip')" @mouseleave="onHelpMouseLeave" @click.prevent="onHelpClick('zip')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+              </button>
+              <span class="help-tooltip" :class="{ visible: openHelpId === 'zip' }">{{ fieldHelp.zip }}</span>
+            </span>
+          </label>
           <input type="file" accept=".zip" @change="onZipSelect" />
           <p class="form-hint">Upload a .zip of your Node project (must contain package.json at root or in a single root folder).</p>
         </div>
         <div class="form-group">
-          <label>Use preset</label>
+          <label>
+            Use preset
+            <span class="help-wrap">
+              <button type="button" class="help-trigger" aria-label="Help" @mouseenter="onHelpMouseEnter('preset')" @mouseleave="onHelpMouseLeave" @click.prevent="onHelpClick('preset')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+              </button>
+              <span class="help-tooltip" :class="{ visible: openHelpId === 'preset' }">{{ fieldHelp.preset }}</span>
+            </span>
+          </label>
           <select v-model="selectedPresetId" @change="applyPreset">
             <option value="">None</option>
             <option v-for="p in presets" :key="p.id" :value="p.id">{{ p.label }}</option>
           </select>
         </div>
         <div class="form-group">
-          <label>Node version</label>
+          <label>
+            Node version
+            <span class="help-wrap">
+              <button type="button" class="help-trigger" aria-label="Help" @mouseenter="onHelpMouseEnter('node_version')" @mouseleave="onHelpMouseLeave" @click.prevent="onHelpClick('node_version')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+              </button>
+              <span class="help-tooltip" :class="{ visible: openHelpId === 'node_version' }">{{ fieldHelp.node_version }}</span>
+            </span>
+          </label>
           <select v-if="nodeVersions.length" v-model="form.node_version">
             <option v-for="v in nodeVersions" :key="v" :value="v">{{ v }}</option>
           </select>
@@ -76,19 +132,51 @@
           </template>
         </div>
         <div class="form-group">
-          <label>Install command</label>
+          <label>
+            Install command
+            <span class="help-wrap">
+              <button type="button" class="help-trigger" aria-label="Help" @mouseenter="onHelpMouseEnter('install_cmd')" @mouseleave="onHelpMouseLeave" @click.prevent="onHelpClick('install_cmd')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+              </button>
+              <span class="help-tooltip" :class="{ visible: openHelpId === 'install_cmd' }">{{ fieldHelp.install_cmd }}</span>
+            </span>
+          </label>
           <input v-model="form.install_cmd" type="text" placeholder="npm install" />
         </div>
         <div class="form-group">
-          <label>Build command (optional)</label>
+          <label>
+            Build command (optional)
+            <span class="help-wrap">
+              <button type="button" class="help-trigger" aria-label="Help" @mouseenter="onHelpMouseEnter('build_cmd')" @mouseleave="onHelpMouseLeave" @click.prevent="onHelpClick('build_cmd')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+              </button>
+              <span class="help-tooltip" :class="{ visible: openHelpId === 'build_cmd' }">{{ fieldHelp.build_cmd }}</span>
+            </span>
+          </label>
           <input v-model="form.build_cmd" type="text" placeholder="npm run build" />
         </div>
         <div class="form-group">
-          <label>Start command</label>
+          <label>
+            Start command
+            <span class="help-wrap">
+              <button type="button" class="help-trigger" aria-label="Help" @mouseenter="onHelpMouseEnter('start_cmd')" @mouseleave="onHelpMouseLeave" @click.prevent="onHelpClick('start_cmd')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+              </button>
+              <span class="help-tooltip" :class="{ visible: openHelpId === 'start_cmd' }">{{ fieldHelp.start_cmd }}</span>
+            </span>
+          </label>
           <input v-model="form.start_cmd" type="text" placeholder="npm start" />
         </div>
         <div class="form-group">
-          <label>Domain (optional)</label>
+          <label>
+            Domain (optional)
+            <span class="help-wrap">
+              <button type="button" class="help-trigger" aria-label="Help" @mouseenter="onHelpMouseEnter('domain')" @mouseleave="onHelpMouseLeave" @click.prevent="onHelpClick('domain')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+              </button>
+              <span class="help-tooltip" :class="{ visible: openHelpId === 'domain' }">{{ fieldHelp.domain }}</span>
+            </span>
+          </label>
           <input
             v-model="form.domain"
             type="text"
@@ -104,6 +192,12 @@
           <label style="display:flex; align-items:center; gap:0.5rem;">
             <input v-model="form.ssl_enabled" type="checkbox" />
             Enable SSL for this app (requires domain and cert)
+            <span class="help-wrap">
+              <button type="button" class="help-trigger" aria-label="Help" @mouseenter="onHelpMouseEnter('ssl_enabled')" @mouseleave="onHelpMouseLeave" @click.prevent="onHelpClick('ssl_enabled')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+              </button>
+              <span class="help-tooltip" :class="{ visible: openHelpId === 'ssl_enabled' }">{{ fieldHelp.ssl_enabled }}</span>
+            </span>
           </label>
         </div>
         <div class="action-btns" style="margin-top:1rem;">
@@ -208,7 +302,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick } from 'vue';
 import { api } from '../api';
 
 const apps = ref([]);
@@ -230,6 +324,39 @@ const zipFile = ref(null);
 const selectedPresetId = ref('');
 const suggestLoading = ref(false);
 const suggestError = ref('');
+const openHelpId = ref(null);
+const helpPinned = ref(false);
+
+const fieldHelp = {
+  name: 'A short identifier for your app (e.g. my-app). Used in the app list and on the server.',
+  repo_url: 'The Git clone URL in HTTPS or SSH format. Example: https://github.com/user/repo.git',
+  branch: 'The ref to deploy: a branch name (e.g. main), a tag (e.g. v1.0.0), or a full commit SHA.',
+  suggest: 'Fetches package.json from the repo and suggests install, build, and start commands plus Node version.',
+  zip: 'Upload a .zip of your Node.js project. The archive must contain package.json at the root or in a single top-level folder.',
+  preset: 'Pre-fill install, build, and start commands for common frameworks (Nuxt, Next.js, Express, Nest.js).',
+  node_version: 'The Node.js version to run the app. It must be installed under Node versions first.',
+  install_cmd: 'Command to install dependencies (e.g. npm install or yarn install). Run once during deploy.',
+  build_cmd: 'Optional. Command to build the app (e.g. npm run build). Leave empty if the app has no build step.',
+  start_cmd: 'Command to start the app (e.g. npm start or node server.js). This is run by PM2 to keep the app running.',
+  domain: 'Optional. Public hostname for the app (e.g. app.example.com). Point DNS to this server before enabling.',
+  ssl_enabled: 'Request a Let\'s Encrypt certificate for the app domain. Requires a domain above and the server reachable on ports 80 and 443.',
+};
+
+function onHelpMouseEnter(id) {
+  if (!helpPinned.value) openHelpId.value = id;
+}
+function onHelpMouseLeave() {
+  if (!helpPinned.value) openHelpId.value = null;
+}
+function onHelpClick(id) {
+  if (openHelpId.value === id) {
+    openHelpId.value = null;
+    helpPinned.value = false;
+  } else {
+    openHelpId.value = id;
+    helpPinned.value = true;
+  }
+}
 
 const presets = [
   { id: 'nuxt3', label: 'Nuxt 3', install_cmd: 'npm install', build_cmd: 'npm run build', start_cmd: 'node .output/server/index.mjs', node_version: '20' },
@@ -450,7 +577,17 @@ async function fetchDefaultBranchIfEmpty() {
 onMounted(() => {
   load();
   loadNodeVersions();
+  document.addEventListener('click', onDocumentClick);
 });
+onUnmounted(() => {
+  document.removeEventListener('click', onDocumentClick);
+});
+function onDocumentClick(e) {
+  if (helpPinned.value && openHelpId.value && !e.target.closest('.help-wrap')) {
+    openHelpId.value = null;
+    helpPinned.value = false;
+  }
+}
 
 const stepLabels = {
   clone: 'Cloning repository…',
@@ -597,6 +734,77 @@ function closeCreationOverlay() {
   margin: 0.25rem 0 0;
   font-size: 0.8125rem;
   color: var(--text-muted);
+}
+.help-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.25rem;
+  vertical-align: middle;
+}
+.help-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.help-trigger:hover {
+  color: var(--accent);
+  background: rgba(99, 102, 241, 0.15);
+}
+.help-tooltip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 0.5rem);
+  transform: translateX(-50%) scale(0.96);
+  min-width: 200px;
+  max-width: 280px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--text);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.15s ease, visibility 0.15s ease, transform 0.15s ease;
+  z-index: 50;
+}
+.help-wrap:hover .help-tooltip,
+.help-tooltip.visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) scale(1);
+}
+.help-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-left: -6px;
+  border: 6px solid transparent;
+  border-top-color: var(--border);
+}
+.help-tooltip::before {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-left: -5px;
+  border: 5px solid transparent;
+  border-top-color: var(--bg-card);
+  z-index: 1;
 }
 .creation-overlay {
   position: fixed;

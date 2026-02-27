@@ -83,6 +83,10 @@ function writeStreamLine(res, obj) {
   res.write(JSON.stringify(obj) + '\n');
 }
 
+function flushStream() {
+  return new Promise((r) => setImmediate(r));
+}
+
 function buildCreateDataFromBody(body, isZip = false) {
   const name = validateName(body.name);
   if (!name) throw new Error('name is required');
@@ -114,38 +118,44 @@ appsRouter.post('/from-zip', upload.single('zip'), async (req, res, next) => {
       return res.status(400).json({ error: e.message || 'Validation failed' });
     }
     const app = db.createApp(createData);
-    const send = (obj) => stream && writeStreamLine(res, obj);
+    const send = stream
+      ? async (obj) => {
+          writeStreamLine(res, obj);
+          await flushStream();
+        }
+      : () => {};
     if (stream) {
       res.setHeader('Content-Type', 'application/x-ndjson');
       res.setHeader('Cache-Control', 'no-cache');
       res.flushHeaders && res.flushHeaders();
     }
     try {
-      send({ step: 'extract', message: 'Extracting zip…' });
+      await send({ step: 'extract', message: 'Extracting zip…' });
       appManager.extractZipToApp(app, zipPath);
-      send({ step: 'extract_done', message: 'Extract complete' });
-      send({ step: 'install', message: 'Running install…' });
+      await send({ step: 'extract_done', message: 'Extract complete' });
+      await send({ step: 'install', message: 'Running install…' });
       const installOut = appManager.runInstall(app);
-      send({ step: 'install_done', stdout: installOut.stdout || '', stderr: installOut.stderr || '' });
+      await send({ step: 'install_done', stdout: installOut.stdout || '', stderr: installOut.stderr || '' });
       if (app.build_cmd) {
-        send({ step: 'build', message: 'Running build…' });
+        await send({ step: 'build', message: 'Running build…' });
         const buildOut = appManager.runBuild(app);
-        send({ step: 'build_done', stdout: buildOut.stdout || '', stderr: buildOut.stderr || '' });
+        await send({ step: 'build_done', stdout: buildOut.stdout || '', stderr: buildOut.stderr || '' });
       }
       let nginxResult = {};
       if (app.domain) {
-        send({ step: 'nginx', message: 'Configuring nginx…' });
-        if (app.ssl_enabled) send({ step: 'ssl', message: 'Obtaining SSL certificate…' });
+        await send({ step: 'nginx', message: 'Configuring nginx…' });
+        if (app.ssl_enabled) await send({ step: 'ssl', message: 'Obtaining SSL certificate…' });
         nginxResult = appManager.setupNginxAndReload(app);
-        if (app.ssl_enabled) send({ step: 'ssl_done', message: nginxResult.sslError ? 'SSL certificate could not be obtained' : 'SSL ready', sslError: nginxResult.sslError });
-        send({ step: 'nginx_done' });
+        if (app.ssl_enabled) await send({ step: 'ssl_done', message: nginxResult.sslError ? 'SSL certificate could not be obtained' : 'SSL ready', sslError: nginxResult.sslError });
+        await send({ step: 'nginx_done' });
       }
-      send({ step: 'start', message: 'Starting app…' });
+      await send({ step: 'start', message: 'Starting app…' });
       appManager.startApp(app);
-      send({ step: 'start_done' });
+      await send({ step: 'start_done' });
       const finalApp = appToJson(db.getApp(app.id));
       if (stream) {
         writeStreamLine(res, { done: true, app: finalApp, sslWarning: nginxResult.sslError || undefined });
+        await flushStream();
         res.end();
       } else {
         res.status(201).json(finalApp);
@@ -159,11 +169,18 @@ appsRouter.post('/from-zip', upload.single('zip'), async (req, res, next) => {
         if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true });
       } catch (_) {}
       const errMsg = e.message || 'Setup failed';
-      if (stream) { writeStreamLine(res, { error: errMsg }); res.end(); } else { return res.status(500).json({ error: errMsg }); }
+      if (stream) {
+        writeStreamLine(res, { error: errMsg });
+        await flushStream();
+        res.end();
+      } else {
+        return res.status(500).json({ error: errMsg });
+      }
     }
   } catch (e) {
     if (!stream) return next(e);
     writeStreamLine(res, { error: e.message || 'Request failed' });
+    await flushStream();
     res.end();
   } finally {
     if (zipPath && fs.existsSync(zipPath)) try { fs.unlinkSync(zipPath); } catch (_) {}
@@ -192,47 +209,53 @@ appsRouter.post('/', async (req, res, next) => {
       return res.status(400).json({ error: e.message || 'Validation failed' });
     }
     const app = db.createApp(createData);
-    const send = (obj) => stream && writeStreamLine(res, obj);
+    const send = stream
+      ? async (obj) => {
+          writeStreamLine(res, obj);
+          await flushStream();
+        }
+      : () => {};
     if (stream) {
       res.setHeader('Content-Type', 'application/x-ndjson');
       res.setHeader('Cache-Control', 'no-cache');
       res.flushHeaders && res.flushHeaders();
     }
     try {
-      send({ step: 'clone', message: 'Cloning repository…' });
+      await send({ step: 'clone', message: 'Cloning repository…' });
       const { actualBranch } = appManager.cloneApp(app);
       if (actualBranch && actualBranch !== app.branch) {
         db.updateApp(app.id, { branch: actualBranch });
         app.branch = actualBranch;
       }
-      send({ step: 'clone_done', message: 'Repository ready' });
+      await send({ step: 'clone_done', message: 'Repository ready' });
 
-      send({ step: 'install', message: 'Running install…' });
+      await send({ step: 'install', message: 'Running install…' });
       const installOut = appManager.runInstall(app);
-      send({ step: 'install_done', stdout: installOut.stdout || '', stderr: installOut.stderr || '' });
+      await send({ step: 'install_done', stdout: installOut.stdout || '', stderr: installOut.stderr || '' });
 
       if (app.build_cmd) {
-        send({ step: 'build', message: 'Running build…' });
+        await send({ step: 'build', message: 'Running build…' });
         const buildOut = appManager.runBuild(app);
-        send({ step: 'build_done', stdout: buildOut.stdout || '', stderr: buildOut.stderr || '' });
+        await send({ step: 'build_done', stdout: buildOut.stdout || '', stderr: buildOut.stderr || '' });
       }
 
       let nginxResult = {};
       if (app.domain) {
-        send({ step: 'nginx', message: 'Configuring nginx…' });
-        if (app.ssl_enabled) send({ step: 'ssl', message: 'Obtaining SSL certificate…' });
+        await send({ step: 'nginx', message: 'Configuring nginx…' });
+        if (app.ssl_enabled) await send({ step: 'ssl', message: 'Obtaining SSL certificate…' });
         nginxResult = appManager.setupNginxAndReload(app);
-        if (app.ssl_enabled) send({ step: 'ssl_done', message: nginxResult.sslError ? 'SSL certificate could not be obtained' : 'SSL ready', sslError: nginxResult.sslError });
-        send({ step: 'nginx_done' });
+        if (app.ssl_enabled) await send({ step: 'ssl_done', message: nginxResult.sslError ? 'SSL certificate could not be obtained' : 'SSL ready', sslError: nginxResult.sslError });
+        await send({ step: 'nginx_done' });
       }
 
-      send({ step: 'start', message: 'Starting app…' });
+      await send({ step: 'start', message: 'Starting app…' });
       appManager.startApp(app);
-      send({ step: 'start_done' });
+      await send({ step: 'start_done' });
 
       const finalApp = appToJson(db.getApp(app.id));
       if (stream) {
         writeStreamLine(res, { done: true, app: finalApp, sslWarning: nginxResult.sslError || undefined });
+        await flushStream();
         res.end();
       } else {
         res.status(201).json(finalApp);
@@ -251,6 +274,7 @@ appsRouter.post('/', async (req, res, next) => {
       const errMsg = e.message || 'Setup failed';
       if (stream) {
         writeStreamLine(res, { error: errMsg });
+        await flushStream();
         res.end();
       } else {
         return res.status(500).json({ error: errMsg });
@@ -259,6 +283,7 @@ appsRouter.post('/', async (req, res, next) => {
   } catch (e) {
     if (!stream) return next(e);
     writeStreamLine(res, { error: e.message || 'Request failed' });
+    await flushStream();
     res.end();
   }
 });

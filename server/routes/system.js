@@ -136,6 +136,69 @@ function getServerIp() {
   }
 }
 
+function getSystemInfo() {
+  const info = {
+    hostname: os.hostname(),
+    ip: getServerIp(),
+    memory: null,
+    swap: null,
+    disk: null,
+  };
+
+  try {
+    const totalMem = os.totalmem();
+    const freeMem = os.freemem();
+    info.memory = {
+      total: totalMem,
+      free: freeMem,
+      used: totalMem - freeMem,
+    };
+  } catch (_) {}
+
+  try {
+    const raw = fs.readFileSync('/proc/meminfo', 'utf8');
+    const get = (key) => {
+      const m = raw.match(new RegExp(`${key}:\\s*(\\d+)`, 'm'));
+      return m ? parseInt(m[1], 10) * 1024 : 0;
+    };
+    const swapTotal = get('SwapTotal');
+    const swapFree = get('SwapFree');
+    if (swapTotal >= 0 && swapFree >= 0) {
+      info.swap = {
+        total: swapTotal,
+        free: swapFree,
+        used: swapTotal - swapFree,
+      };
+    }
+  } catch (_) {}
+
+  try {
+    const stat = fs.statfsSync(process.platform === 'win32' ? 'C:\\' : '/');
+    const blockSize = stat.frsize || stat.bsize || 512;
+    const total = (stat.blocks || 0) * blockSize;
+    const free = (stat.bfree || 0) * blockSize;
+    const avail = (stat.bavail != null ? stat.bavail : stat.bfree || 0) * blockSize;
+    if (total > 0) {
+      info.disk = {
+        total,
+        free,
+        available: avail,
+        used: total - free,
+      };
+    }
+  } catch (_) {}
+
+  return info;
+}
+
+systemRouter.get('/info', (req, res, next) => {
+  try {
+    res.json(getSystemInfo());
+  } catch (e) {
+    next(e);
+  }
+});
+
 systemRouter.get('/ip', (req, res, next) => {
   try {
     const ip = getServerIp();

@@ -193,6 +193,7 @@ export const api = {
   },
   system: {
     ip: () => request('/api/system/ip'),
+    info: () => request('/api/system/info'),
     checkDomain: (domain) => request(`/api/system/check-domain?domain=${encodeURIComponent(domain)}`),
     defaultBranch: (url) => request(`/api/system/default-branch?url=${encodeURIComponent(url)}`),
     maintenanceOptions: () => request('/api/system/maintenance'),
