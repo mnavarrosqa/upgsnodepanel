@@ -30,7 +30,7 @@ function appToJson(row) {
   if (!row) return null;
   const domain = row.domain && String(row.domain).trim();
   const sslEnabled = Boolean(row.ssl_enabled);
-  const sslActive = sslEnabled && domain && nginx.certsExist(domain);
+  const sslActive = sslEnabled && domain && (nginx.certsExist(domain) || nginx.appConfigHasSsl(row.id));
   return {
     ...row,
     ssl_enabled: sslEnabled,

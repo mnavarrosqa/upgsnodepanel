@@ -26,6 +26,19 @@ function appConfPath(id) {
   return path.join(NGINX_APPS_DIR, `upgs-node-app-${id}.conf`);
 }
 
+/** True if the app's nginx vhost file contains an SSL server block (so badge shows active when panel user cannot read /etc/letsencrypt). */
+export function appConfigHasSsl(id) {
+  if (id == null || id === '') return false;
+  const confPath = appConfPath(id);
+  try {
+    if (!fs.existsSync(confPath)) return false;
+    const content = fs.readFileSync(confPath, 'utf-8');
+    return /listen\s+443\s+ssl/.test(content) && /ssl_certificate\s+/.test(content);
+  } catch {
+    return false;
+  }
+}
+
 function certPath(domain) {
   return path.join(LETSENCRYPT_BASE, domain, 'fullchain.pem');
 }
