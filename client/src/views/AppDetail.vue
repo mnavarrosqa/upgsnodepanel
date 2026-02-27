@@ -145,6 +145,16 @@
       </div>
 
       <div v-show="activeTab === 'files'" class="detail-tab-panel" role="tabpanel">
+        <section v-if="app.size != null" class="card card--run-commands">
+          <h2 class="card__title">Run &amp; commands</h2>
+          <p class="card__muted">After uploading or editing files here, run install, build, then start the app. You can also change install/build/start commands in <button type="button" class="link-like" @click="switchTab('config')">App config</button>.</p>
+          <div class="action-btns">
+            <button type="button" class="btn" @click="runInstall" :disabled="busy || saving">{{ busyInstall ? 'Running…' : 'Run install' }}</button>
+            <button type="button" class="btn" @click="runBuild" :disabled="busy || saving">{{ busyBuild ? 'Running…' : 'Run build' }}</button>
+            <button type="button" class="btn" @click="doStart" :disabled="app.status === 'running' || saving || busyStart">{{ busyStart ? 'Starting…' : 'Run app' }}</button>
+            <button type="button" class="btn" @click="doRestart" :disabled="saving || busyRestart">{{ busyRestart ? 'Restarting…' : 'Restart' }}</button>
+          </div>
+        </section>
         <section class="card card--files">
           <h2 class="card__title">File explorer</h2>
           <p class="card__muted">Browse and manage files in this app’s directory. Text files under 512 KB can be viewed and edited.</p>
@@ -1119,6 +1129,18 @@ async function doDelete() {
   margin: 0.5rem 0 0;
   font-size: 0.875rem;
   color: var(--danger);
+}
+.link-like {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.link-like:hover {
+  text-decoration: none;
 }
 .card + .card,
 section.card + section.card {
