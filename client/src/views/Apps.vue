@@ -28,20 +28,42 @@
           />
         </div>
         <div class="form-group">
-          <label>Branch</label>
+          <label>Branch, tag, or commit</label>
           <input
             v-model="form.branch"
             type="text"
-            placeholder="Auto (main or master)"
+            placeholder="main, v1.0.0, or abc1234"
             @focus="fetchDefaultBranchIfEmpty"
           />
+          <p class="form-hint">Use a branch name, a tag (e.g. v1.0.0), or a commit SHA.</p>
           <p v-if="branchDetected" class="domain-check domain-check--ok">{{ branchDetected }}</p>
+        </div>
+        <div class="form-group">
+          <label>Suggest from repo</label>
+          <div class="suggest-row">
+            <button
+              type="button"
+              class="btn"
+              :disabled="!form.repo_url?.trim() || suggestLoading"
+              @click="suggestFromRepo"
+            >
+              {{ suggestLoading ? 'Fetching…' : 'Suggest from repo' }}
+            </button>
+            <span v-if="suggestError" class="suggest-error">{{ suggestError }}</span>
+          </div>
         </div>
         </template>
         <div v-else class="form-group">
           <label>Project ZIP</label>
           <input type="file" accept=".zip" @change="onZipSelect" />
           <p class="form-hint">Upload a .zip of your Node project (must contain package.json at root or in a single root folder).</p>
+        </div>
+        <div class="form-group">
+          <label>Use preset</label>
+          <select v-model="selectedPresetId" @change="applyPreset">
+            <option value="">None</option>
+            <option v-for="p in presets" :key="p.id" :value="p.id">{{ p.label }}</option>
+          </select>
         </div>
         <div class="form-group">
           <label>Node version</label>
@@ -199,7 +221,18 @@ const branchDetected = ref('');
 const nodeVersions = ref([]);
 const sourceType = ref('git');
 const zipFile = ref(null);
-const form = ref({
+const selectedPresetId = ref('');
+const suggestLoading = ref(false);
+const suggestError = ref('');
+
+const presets = [
+  { id: 'nuxt3', label: 'Nuxt 3', install_cmd: 'npm install', build_cmd: 'npm run build', start_cmd: 'node .output/server/index.mjs', node_version: '20' },
+  { id: 'nextjs', label: 'Next.js', install_cmd: 'npm install', build_cmd: 'npm run build', start_cmd: 'npm start', node_version: '20' },
+  { id: 'express', label: 'Express', install_cmd: 'npm install', build_cmd: '', start_cmd: 'npm start', node_version: '20' },
+  { id: 'nestjs', label: 'Nest.js', install_cmd: 'npm install', build_cmd: 'npm run build', start_cmd: 'npm run start:prod', node_version: '20' },
+];
+
+const DEFAULT_FORM = {
   name: '',
   repo_url: '',
   branch: 'main',
@@ -209,7 +242,57 @@ const form = ref({
   start_cmd: 'npm start',
   domain: '',
   ssl_enabled: false,
-});
+};
+
+const form = ref({ ...DEFAULT_FORM });
+
+function applyPreset() {
+  const id = selectedPresetId.value;
+  if (!id) {
+    form.value.install_cmd = DEFAULT_FORM.install_cmd;
+    form.value.build_cmd = DEFAULT_FORM.build_cmd;
+    form.value.start_cmd = DEFAULT_FORM.start_cmd;
+    form.value.node_version = nodeVersions.value[0] || DEFAULT_FORM.node_version;
+    return;
+  }
+  const p = presets.find((x) => x.id === id);
+  if (!p) return;
+  form.value.install_cmd = p.install_cmd;
+  form.value.build_cmd = p.build_cmd;
+  form.value.start_cmd = p.start_cmd;
+  if (nodeVersions.value.includes(p.node_version)) {
+    form.value.node_version = p.node_version;
+  } else {
+    form.value.node_version = p.node_version;
+  }
+  if (!form.value.name?.trim() && form.value.repo_url?.trim()) {
+    try {
+      const u = new URL(form.value.repo_url);
+      const segs = u.pathname.replace(/\.git$/, '').split('/').filter(Boolean);
+      if (segs.length) form.value.name = segs[segs.length - 1];
+    } catch (_) {}
+  }
+}
+
+async function suggestFromRepo() {
+  const url = (form.value.repo_url || '').trim();
+  if (!url) return;
+  suggestError.value = '';
+  suggestLoading.value = true;
+  try {
+    const data = await api.apps.suggest({ repo_url: url, ref: form.value.branch?.trim() || undefined });
+    if (data.install_cmd != null) form.value.install_cmd = data.install_cmd;
+    if (data.build_cmd != null) form.value.build_cmd = data.build_cmd ?? '';
+    if (data.start_cmd != null) form.value.start_cmd = data.start_cmd;
+    if (data.node_version != null && (nodeVersions.value.length === 0 || nodeVersions.value.includes(data.node_version))) {
+      form.value.node_version = data.node_version;
+    }
+  } catch (e) {
+    suggestError.value = e.message || 'Could not fetch package.json';
+  } finally {
+    suggestLoading.value = false;
+  }
+}
 
 function onZipSelect(e) {
   const f = e.target.files && e.target.files[0];
@@ -259,6 +342,7 @@ function closeForm() {
   domainCheckStatus.value = '';
   domainCheckMessage.value = '';
   branchDetected.value = '';
+  suggestError.value = '';
 }
 
 async function doStart(app) {
@@ -428,7 +512,9 @@ async function create() {
     }
     creationSslWarning.value = result.sslWarning || '';
     showForm.value = false;
-    form.value = { name: '', repo_url: '', branch: 'main', node_version: nodeVersions.value[0] || '20', install_cmd: 'npm install', build_cmd: '', start_cmd: 'npm start', domain: '', ssl_enabled: false };
+    form.value = { ...DEFAULT_FORM, node_version: nodeVersions.value[0] || DEFAULT_FORM.node_version };
+    selectedPresetId.value = '';
+    suggestError.value = '';
     zipFile.value = null;
     domainCheckStatus.value = '';
     domainCheckMessage.value = '';
@@ -536,6 +622,16 @@ function closeCreationOverlay() {
   color: #eab308;
 }
 .domain-check--error {
+  color: var(--danger);
+}
+.suggest-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.suggest-error {
+  font-size: 0.875rem;
   color: var(--danger);
 }
 .ssl-off {

@@ -6,7 +6,7 @@ import multer from 'multer';
 import * as db from '../db.js';
 import * as appManager from '../services/appManager.js';
 import * as nginx from '../services/nginx.js';
-import { validateAppInput, validateName, validateDomain, validateCommand, validateNodeVersion, validateRepoUrl, validateBranch } from '../lib/validate.js';
+import { validateAppInput, validateName, validateDomain, validateCommand, validateNodeVersion, validateRepoUrl, validateRef } from '../lib/validate.js';
 
 export const appsRouter = Router();
 
@@ -59,6 +59,26 @@ appsRouter.get('/:id', (req, res, next) => {
   }
 });
 
+appsRouter.post('/suggest', async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    const repoUrl = body.repo_url;
+    const ref = body.ref;
+    if (!repoUrl || typeof repoUrl !== 'string' || !repoUrl.trim()) {
+      return res.status(400).json({ error: 'repo_url is required' });
+    }
+    const { suggestFromPackageJson } = await import('../services/suggestFromPackageJson.js');
+    const result = await suggestFromPackageJson(repoUrl.trim(), ref);
+    res.json(result);
+  } catch (e) {
+    const msg = e.message || 'Suggest failed';
+    if (msg.includes('required') || msg.includes('Unsupported') || msg.includes('not found')) {
+      return res.status(400).json({ error: msg });
+    }
+    next(e);
+  }
+});
+
 function writeStreamLine(res, obj) {
   res.write(JSON.stringify(obj) + '\n');
 }
@@ -69,7 +89,7 @@ function buildCreateDataFromBody(body, isZip = false) {
   return {
     name,
     repo_url: isZip ? 'upload://' : (validateRepoUrl(body.repo_url) || (() => { throw new Error('repo_url is required'); })()),
-    branch: body.branch != null && String(body.branch).trim() !== '' ? validateBranch(body.branch) : null,
+    branch: body.branch != null && String(body.branch).trim() !== '' ? validateRef(body.branch) : null,
     install_cmd: validateCommand(body.install_cmd, 'install_cmd') || 'npm install',
     build_cmd: validateCommand(body.build_cmd, 'build_cmd') || null,
     start_cmd: validateCommand(body.start_cmd, 'start_cmd') || 'npm start',

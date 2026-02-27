@@ -60,54 +60,76 @@ export function getAppSize(app) {
   return dirSizeSync(dir);
 }
 
-/**
- * Clones or updates the app repo. Returns { dir, actualBranch }.
- * If app.branch is empty/null, uses the repo's default branch (auto-detect). Otherwise checks out the given branch (with main→master fallback).
- */
-export function cloneApp(app) {
-  const dir = appDir(app);
-  const branch = (app.branch != null && String(app.branch).trim() !== '') ? String(app.branch).trim() : null;
-  try {
-    fs.mkdirSync(APPS_BASE, { recursive: true });
-  } catch (_) {}
-  if (fs.existsSync(dir)) {
-    runGit(['fetch'], { cwd: dir });
-    const checkoutBranch = branch || getDefaultBranchInRepo(dir);
-    runGit(['checkout', checkoutBranch], { cwd: dir });
-    runGit(['pull'], { cwd: dir });
-    return { dir, actualBranch: checkoutBranch };
-  }
-  runGit(['clone', app.repo_url, dir], {});
-  let actualBranch;
-  if (branch) {
-    actualBranch = branch;
-    try {
-      runGit(['checkout', branch], { cwd: dir });
-    } catch (e) {
-      if (branch === 'main') {
-        try {
-          runGit(['checkout', 'master'], { cwd: dir });
-          actualBranch = 'master';
-        } catch (_) {
-          const msg = (e.message || '').toLowerCase();
-          const hint = msg.includes('main')
-            ? " Branch 'main' not found. Try setting branch to 'master' or leave empty for auto."
-            : ` Branch '${branch}' not found in the repository.`;
-          throw new Error((e.message || 'Checkout failed').trim() + hint);
-        }
-      } else {
-        throw new Error((e.message || 'Checkout failed').trim() + ` Branch '${branch}' not found.`);
-      }
-    }
-  } else {
-    actualBranch = getDefaultBranchInRepo(dir);
-  }
-  return { dir, actualBranch };
-}
-
 function getDefaultBranchInRepo(dir) {
   const { stdout } = runGit(['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: dir });
   return (stdout || '').trim() || 'main';
+}
+
+/** True if ref looks like a commit SHA (7-40 hex). */
+function isRefSha(ref) {
+  return typeof ref === 'string' && /^[a-f0-9]{7,40}$/i.test(ref.trim());
+}
+
+/**
+ * Clones or updates the app repo. Returns { dir, actualBranch }.
+ * app.branch can be a branch name, tag, or commit SHA. If empty/null, uses the repo's default branch.
+ */
+export function cloneApp(app) {
+  const dir = appDir(app);
+  const rawRef = (app.branch != null && String(app.branch).trim() !== '') ? String(app.branch).trim() : null;
+  const ref = rawRef || null;
+  const refIsSha = ref !== null && isRefSha(ref);
+
+  try {
+    fs.mkdirSync(APPS_BASE, { recursive: true });
+  } catch (_) {}
+
+  if (fs.existsSync(dir)) {
+    runGit(['fetch', '--tags'], { cwd: dir });
+    const checkoutRef = ref || getDefaultBranchInRepo(dir);
+    runGit(['checkout', checkoutRef], { cwd: dir });
+    const headRef = (() => {
+      try {
+        const { stdout } = runGit(['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: dir });
+        return (stdout || '').trim();
+      } catch (_) {
+        return 'HEAD';
+      }
+    })();
+    if (headRef !== 'HEAD') {
+      runGit(['pull'], { cwd: dir });
+    }
+    return { dir, actualBranch: checkoutRef };
+  }
+
+  if (ref === null) {
+    runGit(['clone', app.repo_url, dir], {});
+    const actualBranch = getDefaultBranchInRepo(dir);
+    return { dir, actualBranch };
+  }
+
+  if (refIsSha) {
+    runGit(['clone', app.repo_url, dir], {});
+    runGit(['fetch', 'origin', ref], { cwd: dir });
+    runGit(['checkout', ref], { cwd: dir });
+    return { dir, actualBranch: ref };
+  }
+
+  try {
+    runGit(['clone', '-b', ref, app.repo_url, dir], {});
+  } catch (e) {
+    if (ref === 'main') {
+      runGit(['clone', app.repo_url, dir], {});
+      try {
+        runGit(['checkout', 'master'], { cwd: dir });
+        return { dir, actualBranch: 'master' };
+      } catch (_) {
+        throw new Error((e.message || 'Clone failed').trim() + " Branch 'main' not found. Try 'master' or leave empty for auto.");
+      }
+    }
+    throw e;
+  }
+  return { dir, actualBranch: ref };
 }
 
 const UPLOAD_REPO_PLACEHOLDER = 'upload://';

@@ -16,6 +16,8 @@ const SAFE_NAME = /^[a-zA-Z0-9_.-]+$/;
 const SAFE_DOMAIN = /^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$/;
 const SAFE_COMMAND = /^[a-zA-Z0-9\s\-_./:]+$/;
 const SAFE_NODE_VERSION = /^(\d+(\.\d+)*|lts|node)$/;
+/** Commit SHA: 7-40 hex chars (short or full). */
+const SAFE_SHA = /^[a-f0-9]{7,40}$/i;
 
 function checkLength(value, max, field) {
   if (value != null && value.length > max) {
@@ -43,16 +45,20 @@ export function validateRepoUrl(url) {
   }
 }
 
-/** Returns branch string or null if empty (meaning auto-detect default branch). */
-export function validateBranch(branch) {
-  if (branch == null || typeof branch !== 'string') return null;
-  const s = branch.trim();
+/** Returns branch/tag/ref string or null if empty (meaning auto-detect default branch). Accepts branch name, tag, or commit SHA. */
+export function validateRef(ref) {
+  if (ref == null || typeof ref !== 'string') return null;
+  const s = ref.trim();
   if (!s) return null;
   checkLength(s, MAX_LEN.branch, 'branch');
-  if (!SAFE_BRANCH.test(s)) {
-    throw new Error('branch may only contain letters, numbers, /, ., _, -');
-  }
-  return s;
+  if (SAFE_SHA.test(s)) return s;
+  if (SAFE_BRANCH.test(s)) return s;
+  throw new Error('branch/tag/commit may only contain letters, numbers, /, ., _, -, or a 7–40 character hex commit SHA');
+}
+
+/** @deprecated Use validateRef for branch/tag/commit. */
+export function validateBranch(branch) {
+  return validateRef(branch);
 }
 
 export function validateName(name) {
@@ -114,7 +120,7 @@ export function validateAppInput(data, isCreate = false) {
     if (isCreate && !u) throw new Error('repo_url is required');
     out.repo_url = u;
   }
-  if (data.branch !== undefined) out.branch = validateBranch(data.branch);
+  if (data.branch !== undefined) out.branch = validateRef(data.branch);
   if (data.domain !== undefined) out.domain = validateDomain(data.domain);
   if (data.install_cmd !== undefined) {
     const c = validateCommand(data.install_cmd, 'install_cmd');

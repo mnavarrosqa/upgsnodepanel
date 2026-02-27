@@ -99,8 +99,8 @@
                 </div>
               </div>
               <div v-if="!isUploadApp" class="form-group">
-                <label>Branch</label>
-                <input v-model="edit.branch" type="text" placeholder="main or leave empty" />
+                <label>Branch, tag, or commit</label>
+                <input v-model="edit.branch" type="text" placeholder="main, v1.0.0, or abc1234" />
               </div>
               <div class="form-row form-row--3">
                 <div class="form-group">

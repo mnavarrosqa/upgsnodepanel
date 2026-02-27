@@ -170,6 +170,7 @@ export const api = {
       if (lastApp) return { app: lastApp, sslWarning: lastSslWarning || undefined };
       throw new Error('Create failed');
     },
+    suggest: (body) => request('/api/apps/suggest', { method: 'POST', body: JSON.stringify(body || {}) }),
     update: (id, data) => request(`/api/apps/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     remove: (id) => request(`/api/apps/${id}`, { method: 'DELETE' }),
     start: (id) => request(`/api/apps/${id}/start`, { method: 'POST' }),
