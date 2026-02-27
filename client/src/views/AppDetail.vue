@@ -16,16 +16,19 @@
           </span>
         </div>
         <div class="app-detail-actions">
-          <button type="button" class="btn" @click="doStart" :disabled="app.status === 'running' || saving || busyStart" title="Run">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          <button type="button" class="btn" :class="{ 'btn--busy': busyStart }" @click="doStart" :disabled="app.status === 'running' || saving || busyStart" title="Run">
+            <span v-if="busyStart" class="btn-spinner btn-spinner--lg" aria-hidden="true"></span>
+            <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
             {{ busyStart ? 'Starting…' : 'Run' }}
           </button>
-          <button type="button" class="btn" @click="doStop" :disabled="app.status !== 'running' || saving || busyStop" title="Pause">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+          <button type="button" class="btn" :class="{ 'btn--busy': busyStop }" @click="doStop" :disabled="app.status !== 'running' || saving || busyStop" title="Pause">
+            <span v-if="busyStop" class="btn-spinner btn-spinner--lg" aria-hidden="true"></span>
+            <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
             {{ busyStop ? 'Stopping…' : 'Pause' }}
           </button>
-          <button type="button" class="btn" @click="doRestart" :disabled="saving || busyRestart" title="Restart">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+          <button type="button" class="btn" :class="{ 'btn--busy': busyRestart }" @click="doRestart" :disabled="saving || busyRestart" title="Restart">
+            <span v-if="busyRestart" class="btn-spinner btn-spinner--lg" aria-hidden="true"></span>
+            <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
             {{ busyRestart ? 'Restarting…' : 'Restart' }}
           </button>
           <button type="button" class="btn btn-danger" @click="confirmDelete" :disabled="saving" title="Delete">Delete</button>
@@ -309,7 +312,7 @@
         </div>
       </div>
     </div>
-    <div v-if="toast.show" class="toast" :class="toast.type" role="status">
+    <div v-if="toast.show" class="toast" :class="toast.type" role="alert">
       {{ toast.message }}
     </div>
   </div>
@@ -365,7 +368,7 @@ function showToast(type, message) {
   toastTimer = setTimeout(() => {
     toast.value.show = false;
     toastTimer = null;
-  }, 4000);
+  }, 5000);
 }
 
 const fileExplorerPath = ref('');
@@ -916,16 +919,39 @@ async function doDelete() {
 .action-feedback__dismiss:hover {
   opacity: 1;
 }
+.app-detail-actions .btn--busy {
+  cursor: wait;
+  opacity: 0.9;
+}
+.app-detail-actions .btn-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: btn-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+.app-detail-actions .btn-spinner--lg {
+  width: 18px;
+  height: 18px;
+}
+@keyframes btn-spin {
+  to { transform: rotate(360deg); }
+}
 .toast {
   position: fixed;
-  bottom: 1.5rem;
-  right: 1.5rem;
-  padding: 0.75rem 1.25rem;
+  top: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.85rem 1.5rem;
   border-radius: var(--radius);
-  font-size: 0.875rem;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-  z-index: 200;
-  animation: toast-in 0.2s ease-out;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+  z-index: 9999;
+  animation: toast-in 0.25s ease-out;
+  max-width: 90vw;
 }
 .toast.success {
   background: rgba(34, 197, 94, 0.95);
@@ -940,11 +966,11 @@ async function doDelete() {
 @keyframes toast-in {
   from {
     opacity: 0;
-    transform: translateY(0.5rem);
+    transform: translateX(-50%) translateY(-0.5rem);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateX(-50%) translateY(0);
   }
 }
 .saving-banner {

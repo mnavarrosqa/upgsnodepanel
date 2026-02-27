@@ -299,16 +299,19 @@
               <td>
                 <div class="list-actions">
                   <router-link :to="`/apps/${app.id}`" class="btn btn-sm">Open</router-link>
-                  <button type="button" class="btn btn-sm" title="Start" :disabled="app.status === 'running' || busyId === app.id" @click="doStart(app)">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                  <button type="button" class="btn btn-sm" :class="{ 'btn--busy': busyId === app.id && busyAction === 'start' }" title="Start" :disabled="app.status === 'running' || busyId === app.id" @click="doStart(app)">
+                    <span v-if="busyId === app.id && busyAction === 'start'" class="btn-spinner" aria-hidden="true"></span>
+                    <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
                     <span v-if="busyId === app.id && busyAction === 'start'" class="btn-busy-label">Starting…</span>
                   </button>
-                  <button type="button" class="btn btn-sm" title="Stop" :disabled="app.status !== 'running' || busyId === app.id" @click="doStop(app)">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                  <button type="button" class="btn btn-sm" :class="{ 'btn--busy': busyId === app.id && busyAction === 'stop' }" title="Stop" :disabled="app.status !== 'running' || busyId === app.id" @click="doStop(app)">
+                    <span v-if="busyId === app.id && busyAction === 'stop'" class="btn-spinner" aria-hidden="true"></span>
+                    <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
                     <span v-if="busyId === app.id && busyAction === 'stop'" class="btn-busy-label">Stopping…</span>
                   </button>
-                  <button type="button" class="btn btn-sm" title="Restart" :disabled="busyId === app.id" @click="doRestart(app)">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+                  <button type="button" class="btn btn-sm" :class="{ 'btn--busy': busyId === app.id && busyAction === 'restart' }" title="Restart" :disabled="busyId === app.id" @click="doRestart(app)">
+                    <span v-if="busyId === app.id && busyAction === 'restart'" class="btn-spinner" aria-hidden="true"></span>
+                    <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
                     <span v-if="busyId === app.id && busyAction === 'restart'" class="btn-busy-label">Restarting…</span>
                   </button>
                   <button type="button" class="btn btn-sm btn-danger" title="Delete" :disabled="busyId === app.id" @click="confirmDelete(app)">
@@ -341,7 +344,7 @@
         </div>
       </div>
     </div>
-    <div v-if="toast.show" class="toast" :class="toast.type" role="status">
+    <div v-if="toast.show" class="toast" :class="toast.type" role="alert">
       {{ toast.message }}
     </div>
   </div>
@@ -559,7 +562,7 @@ function showToast(type, message) {
   toastTimer = setTimeout(() => {
     toast.value.show = false;
     toastTimer = null;
-  }, 4000);
+  }, 5000);
 }
 
 async function load() {
@@ -1157,20 +1160,38 @@ function closeCreationOverlay() {
   justify-content: center;
   gap: 0.25rem;
 }
+.list-actions .btn-sm.btn--busy {
+  opacity: 0.9;
+  cursor: wait;
+}
 .btn-busy-label {
   font-size: 0.75rem;
   white-space: nowrap;
 }
+.btn-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: btn-spin 0.7s linear infinite;
+}
+@keyframes btn-spin {
+  to { transform: rotate(360deg); }
+}
 .toast {
   position: fixed;
-  bottom: 1.5rem;
-  right: 1.5rem;
-  padding: 0.75rem 1.25rem;
+  top: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.85rem 1.5rem;
   border-radius: var(--radius);
-  font-size: 0.875rem;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-  z-index: 200;
-  animation: toast-in 0.2s ease-out;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+  z-index: 9999;
+  animation: toast-in 0.25s ease-out;
+  max-width: 90vw;
 }
 .toast.success {
   background: rgba(34, 197, 94, 0.95);
@@ -1185,11 +1206,11 @@ function closeCreationOverlay() {
 @keyframes toast-in {
   from {
     opacity: 0;
-    transform: translateY(0.5rem);
+    transform: translateX(-50%) translateY(-0.5rem);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateX(-50%) translateY(0);
   }
 }
 .modal-overlay {
