@@ -48,7 +48,11 @@
             <div v-if="repoVisibility === 'private'" class="private-repo-info__ssh-key">
               <p class="private-repo-info__ssh-key-label">Server SSH public key to add as deploy key:</p>
               <div v-if="sshKeyLoading" class="private-repo-info__ssh-key-loading">Loading…</div>
-              <div v-else-if="sshKeyError" class="private-repo-info__ssh-key-error">{{ sshKeyError }}</div>
+              <div v-else-if="sshKeyGenerating" class="private-repo-info__ssh-key-loading">Generating key…</div>
+              <div v-else-if="sshKeyError && !sshPublicKey" class="private-repo-info__ssh-key-actions">
+                <p class="private-repo-info__ssh-key-error">{{ sshKeyError }}</p>
+                <button type="button" class="btn btn-small" @click="generateSshKey" :disabled="sshKeyGenerating">Generate SSH key</button>
+              </div>
               <div v-else-if="sshPublicKey" class="private-repo-info__ssh-key-block">
                 <code class="private-repo-info__ssh-key-content">{{ sshPublicKey }}</code>
                 <button type="button" class="btn btn-small private-repo-info__copy" @click="copySshKey" aria-label="Copy key">{{ copySshKeyFeedback ? 'Copied!' : 'Copy' }}</button>
@@ -367,6 +371,7 @@ const sshPublicKey = ref(null);
 const sshKeyLoading = ref(false);
 const sshKeyError = ref('');
 const copySshKeyFeedback = ref(false);
+const sshKeyGenerating = ref(false);
 
 const fieldHelp = {
   name: 'A short identifier for your app (e.g. my-app). Used in the app list and on the server.',
@@ -420,6 +425,20 @@ function copySshKey() {
     copySshKeyFeedback.value = true;
     setTimeout(() => { copySshKeyFeedback.value = false; }, 2000);
   });
+}
+
+async function generateSshKey() {
+  sshKeyGenerating.value = true;
+  sshKeyError.value = '';
+  try {
+    const data = await api.system.generateSshPublicKey();
+    sshPublicKey.value = data.publicKey || null;
+    if (!data.publicKey) sshKeyError.value = 'Key generation did not return a key';
+  } catch (e) {
+    sshKeyError.value = e.message || 'Could not generate SSH key';
+  } finally {
+    sshKeyGenerating.value = false;
+  }
 }
 
 watch(repoVisibility, (val) => {
@@ -556,6 +575,7 @@ function closeForm() {
   repoVisibility.value = 'public';
   sshPublicKey.value = null;
   sshKeyError.value = '';
+  sshKeyGenerating.value = false;
 }
 
 async function doStart(app) {
@@ -764,6 +784,7 @@ async function create() {
     repoVisibility.value = 'public';
     sshPublicKey.value = null;
     sshKeyError.value = '';
+    sshKeyGenerating.value = false;
     suggestError.value = '';
     zipFile.value = null;
     domainCheckStatus.value = '';
@@ -853,6 +874,52 @@ function closeCreationOverlay() {
   margin: 0;
   font-size: 0.8125rem;
   color: var(--text-muted);
+}
+.private-repo-info__ssh-key {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+.private-repo-info__ssh-key-label {
+  margin: 0 0 0.35rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.private-repo-info__ssh-key-loading,
+.private-repo-info__ssh-key-error {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+.private-repo-info__ssh-key-error {
+  color: var(--danger, #dc2626);
+}
+.private-repo-info__ssh-key-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.private-repo-info__ssh-key-actions .private-repo-info__ssh-key-error {
+  margin: 0;
+}
+.private-repo-info__ssh-key-block {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.private-repo-info__ssh-key-content {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.75rem;
+  padding: 0.5rem;
+  border-radius: 3px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  word-break: break-all;
+  display: block;
+}
+.private-repo-info__copy {
+  flex-shrink: 0;
 }
 .form-hint {
   margin: 0.25rem 0 0;

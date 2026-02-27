@@ -197,6 +197,7 @@ export const api = {
     checkDomain: (domain) => request(`/api/system/check-domain?domain=${encodeURIComponent(domain)}`),
     defaultBranch: (url) => request(`/api/system/default-branch?url=${encodeURIComponent(url)}`),
     sshPublicKey: () => request('/api/system/ssh-public-key'),
+    generateSshPublicKey: () => request('/api/system/ssh-public-key/generate', { method: 'POST' }),
     maintenanceOptions: () => request('/api/system/maintenance'),
     cleanMaintenance: (items) => request('/api/system/maintenance/clean', { method: 'POST', body: JSON.stringify({ items }) }),
   },

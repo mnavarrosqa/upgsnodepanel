@@ -306,8 +306,54 @@ systemRouter.get('/ssh-public-key', (req, res, next) => {
     }
     res.json({
       publicKey: null,
-      error: 'No SSH key found. On the server run: ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519',
+      error: 'No SSH key found. Generate one below.',
     });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** Generates an SSH key on the server if none exists, then returns the public key. */
+systemRouter.post('/ssh-public-key/generate', (req, res, next) => {
+  try {
+    const home = process.env.HOME || '/root';
+    const sshDir = path.join(home, '.ssh');
+    const keyPath = path.join(sshDir, 'id_ed25519');
+    const pubPath = path.join(sshDir, 'id_ed25519.pub');
+
+    if (fs.existsSync(pubPath)) {
+      const content = fs.readFileSync(pubPath, 'utf8').trim();
+      if (content && !content.includes('\n')) {
+        return res.json({ publicKey: content });
+      }
+    }
+    if (fs.existsSync(path.join(sshDir, 'id_rsa.pub'))) {
+      const content = fs.readFileSync(path.join(sshDir, 'id_rsa.pub'), 'utf8').trim();
+      if (content && !content.includes('\n')) {
+        return res.json({ publicKey: content });
+      }
+    }
+
+    try {
+      fs.mkdirSync(sshDir, { recursive: true, mode: 0o700 });
+    } catch (e) {
+      return res.status(500).json({ error: 'Could not create .ssh directory: ' + (e.message || 'Permission denied') });
+    }
+
+    try {
+      run(`ssh-keygen -t ed25519 -N "" -f "${keyPath}"`, {});
+    } catch (e) {
+      return res.status(500).json({ error: e.message || 'ssh-keygen failed' });
+    }
+
+    if (!fs.existsSync(pubPath)) {
+      return res.status(500).json({ error: 'Key was generated but public file not found' });
+    }
+    const content = fs.readFileSync(pubPath, 'utf8').trim();
+    if (!content || content.includes('\n')) {
+      return res.status(500).json({ error: 'Invalid public key file' });
+    }
+    res.json({ publicKey: content });
   } catch (e) {
     next(e);
   }
