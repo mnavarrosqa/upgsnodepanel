@@ -301,12 +301,15 @@
                   <router-link :to="`/apps/${app.id}`" class="btn btn-sm">Open</router-link>
                   <button type="button" class="btn btn-sm" title="Start" :disabled="app.status === 'running' || busyId === app.id" @click="doStart(app)">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                    <span v-if="busyId === app.id && busyAction === 'start'" class="btn-busy-label">Starting…</span>
                   </button>
                   <button type="button" class="btn btn-sm" title="Stop" :disabled="app.status !== 'running' || busyId === app.id" @click="doStop(app)">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                    <span v-if="busyId === app.id && busyAction === 'stop'" class="btn-busy-label">Stopping…</span>
                   </button>
                   <button type="button" class="btn btn-sm" title="Restart" :disabled="busyId === app.id" @click="doRestart(app)">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+                    <span v-if="busyId === app.id && busyAction === 'restart'" class="btn-busy-label">Restarting…</span>
                   </button>
                   <button type="button" class="btn btn-sm btn-danger" title="Delete" :disabled="busyId === app.id" @click="confirmDelete(app)">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
@@ -337,6 +340,9 @@
           <button type="button" class="btn btn-danger" @click="doDelete" :disabled="deleting">{{ deleting ? 'Deleting…' : 'Delete permanently' }}</button>
         </div>
       </div>
+    </div>
+    <div v-if="toast.show" class="toast" :class="toast.type" role="status">
+      {{ toast.message }}
     </div>
   </div>
 </template>
@@ -539,10 +545,22 @@ function formatSize(bytes) {
 
 const loadError = ref('');
 const busyId = ref(null);
+const busyAction = ref(null);
 const showDeleteModal = ref(false);
 const appToDelete = ref(null);
 const deleting = ref(false);
 const deleteError = ref('');
+
+const toast = ref({ show: false, type: 'success', message: '' });
+let toastTimer = null;
+function showToast(type, message) {
+  if (toastTimer) clearTimeout(toastTimer);
+  toast.value = { show: true, type, message };
+  toastTimer = setTimeout(() => {
+    toast.value.show = false;
+    toastTimer = null;
+  }, 4000);
+}
 
 async function load() {
   loadError.value = '';
@@ -581,33 +599,48 @@ function closeForm() {
 async function doStart(app) {
   if (busyId.value) return;
   busyId.value = app.id;
+  busyAction.value = 'start';
   try {
     await api.apps.start(app.id);
     await load();
+    showToast('success', 'App started.');
+  } catch (e) {
+    showToast('error', e.message || 'Start failed.');
   } finally {
     busyId.value = null;
+    busyAction.value = null;
   }
 }
 
 async function doStop(app) {
   if (busyId.value) return;
   busyId.value = app.id;
+  busyAction.value = 'stop';
   try {
     await api.apps.stop(app.id);
     await load();
+    showToast('success', 'App stopped.');
+  } catch (e) {
+    showToast('error', e.message || 'Stop failed.');
   } finally {
     busyId.value = null;
+    busyAction.value = null;
   }
 }
 
 async function doRestart(app) {
   if (busyId.value) return;
   busyId.value = app.id;
+  busyAction.value = 'restart';
   try {
     await api.apps.restart(app.id);
     await load();
+    showToast('success', 'App restarted.');
+  } catch (e) {
+    showToast('error', e.message || 'Restart failed.');
   } finally {
     busyId.value = null;
+    busyAction.value = null;
   }
 }
 
@@ -1122,6 +1155,42 @@ function closeCreationOverlay() {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 0.25rem;
+}
+.btn-busy-label {
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+.toast {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  padding: 0.75rem 1.25rem;
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  z-index: 200;
+  animation: toast-in 0.2s ease-out;
+}
+.toast.success {
+  background: rgba(34, 197, 94, 0.95);
+  color: white;
+  border: 1px solid var(--success);
+}
+.toast.error {
+  background: rgba(239, 68, 68, 0.95);
+  color: white;
+  border: 1px solid var(--danger);
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .modal-overlay {
   position: fixed;

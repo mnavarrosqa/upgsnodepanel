@@ -16,17 +16,17 @@
           </span>
         </div>
         <div class="app-detail-actions">
-          <button type="button" class="btn" @click="doStart" :disabled="app.status === 'running' || saving" title="Run">
+          <button type="button" class="btn" @click="doStart" :disabled="app.status === 'running' || saving || busyStart" title="Run">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-            Run
+            {{ busyStart ? 'Starting…' : 'Run' }}
           </button>
-          <button type="button" class="btn" @click="doStop" :disabled="app.status !== 'running' || saving" title="Pause">
+          <button type="button" class="btn" @click="doStop" :disabled="app.status !== 'running' || saving || busyStop" title="Pause">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-            Pause
+            {{ busyStop ? 'Stopping…' : 'Pause' }}
           </button>
-          <button type="button" class="btn" @click="doRestart" :disabled="saving" title="Restart">
+          <button type="button" class="btn" @click="doRestart" :disabled="saving || busyRestart" title="Restart">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
-            Restart
+            {{ busyRestart ? 'Restarting…' : 'Restart' }}
           </button>
           <button type="button" class="btn btn-danger" @click="confirmDelete" :disabled="saving" title="Delete">Delete</button>
         </div>
@@ -123,7 +123,7 @@
                 <label>Start command</label>
                 <input v-model="edit.start_cmd" type="text" placeholder="npm start" />
               </div>
-              <button type="submit" class="btn btn-primary" :disabled="saving">Save</button>
+              <button type="submit" class="btn btn-primary" :disabled="saving">{{ saving ? 'Saving…' : 'Save' }}</button>
             </fieldset>
           </form>
         </section>
@@ -215,8 +215,8 @@
           <p class="card__muted">Variables for this app. Restart the app for changes to take effect.</p>
           <textarea v-model="envContent" class="env-editor" placeholder="NODE_ENV=production&#10;PORT=3000" rows="10" spellcheck="false" :disabled="saving" />
           <div class="action-btns">
-            <button type="button" class="btn btn-primary" @click="saveEnv" :disabled="savingEnv || saving">Save .env</button>
-            <button type="button" class="btn" @click="loadEnv" :disabled="saving">Reload</button>
+            <button type="button" class="btn btn-primary" @click="saveEnv" :disabled="savingEnv || saving">{{ savingEnv ? 'Saving…' : 'Save .env' }}</button>
+            <button type="button" class="btn" @click="loadEnv(true)" :disabled="saving || busyReload">{{ busyReload ? 'Reloading…' : 'Reload' }}</button>
           </div>
           <p v-if="envError" class="card__error">{{ envError }}</p>
         </section>
@@ -309,6 +309,9 @@
         </div>
       </div>
     </div>
+    <div v-if="toast.show" class="toast" :class="toast.type" role="status">
+      {{ toast.message }}
+    </div>
   </div>
   <p v-else-if="loadError" style="color:var(--danger);">{{ loadError }}</p>
   <p v-else style="color:var(--text-muted);">Loading…</p>
@@ -347,8 +350,23 @@ const busyInstall = ref(false);
 const busyBuild = ref(false);
 const busyPull = ref(false);
 const busyRedeploy = ref(false);
+const busyStart = ref(false);
+const busyStop = ref(false);
+const busyRestart = ref(false);
+const busyReload = ref(false);
 const busy = computed(() => busyInstall.value || busyBuild.value);
 const logsPre = ref(null);
+
+const toast = ref({ show: false, type: 'success', message: '' });
+let toastTimer = null;
+function showToast(type, message) {
+  if (toastTimer) clearTimeout(toastTimer);
+  toast.value = { show: true, type, message };
+  toastTimer = setTimeout(() => {
+    toast.value.show = false;
+    toastTimer = null;
+  }, 4000);
+}
 
 const fileExplorerPath = ref('');
 const fileExplorerEntries = ref([]);
@@ -454,6 +472,7 @@ function formatSize(bytes) {
 function setFeedback(type, message) {
   if (feedbackTimer.value) clearTimeout(feedbackTimer.value);
   actionFeedback.value = { type, message };
+  showToast(type, message);
   feedbackTimer.value = setTimeout(() => {
     actionFeedback.value = { type: 'success', message: '' };
     feedbackTimer.value = null;
@@ -466,19 +485,22 @@ function clearFeedback() {
   actionFeedback.value = { type: 'success', message: '' };
 }
 
-async function loadEnv() {
+async function loadEnv(showBusy = false) {
   envError.value = '';
+  if (showBusy) busyReload.value = true;
   try {
     const data = await api.apps.env(route.params.id);
     const content = data.env != null ? String(data.env) : '';
     envContent.value = content;
     lastLoadedEnvContent.value = content;
-    setFeedback('success', '.env loaded.');
+    if (showBusy) setFeedback('success', '.env loaded.');
   } catch (e) {
     envContent.value = '';
     lastLoadedEnvContent.value = '';
     envError.value = e.message || 'Failed to load .env';
-    setFeedback('error', e.message || 'Failed to load .env');
+    if (showBusy) setFeedback('error', e.message || 'Failed to load .env');
+  } finally {
+    if (showBusy) busyReload.value = false;
   }
 }
 
@@ -710,32 +732,41 @@ watch([() => app.value, fileExplorerPath], () => {
 }, { immediate: true });
 
 async function doStart() {
+  busyStart.value = true;
   try {
     await api.apps.start(route.params.id);
     app.value = await api.apps.get(route.params.id);
     setFeedback('success', 'App started.');
   } catch (e) {
     setFeedback('error', e.message || 'Start failed.');
+  } finally {
+    busyStart.value = false;
   }
 }
 
 async function doStop() {
+  busyStop.value = true;
   try {
     await api.apps.stop(route.params.id);
     app.value = await api.apps.get(route.params.id);
     setFeedback('success', 'App stopped.');
   } catch (e) {
     setFeedback('error', e.message || 'Stop failed.');
+  } finally {
+    busyStop.value = false;
   }
 }
 
 async function doRestart() {
+  busyRestart.value = true;
   try {
     await api.apps.restart(route.params.id);
     app.value = await api.apps.get(route.params.id);
     setFeedback('success', 'App restarted.');
   } catch (e) {
     setFeedback('error', e.message || 'Restart failed.');
+  } finally {
+    busyRestart.value = false;
   }
 }
 
@@ -884,6 +915,37 @@ async function doDelete() {
 }
 .action-feedback__dismiss:hover {
   opacity: 1;
+}
+.toast {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  padding: 0.75rem 1.25rem;
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  z-index: 200;
+  animation: toast-in 0.2s ease-out;
+}
+.toast.success {
+  background: rgba(34, 197, 94, 0.95);
+  color: white;
+  border: 1px solid var(--success);
+}
+.toast.error {
+  background: rgba(239, 68, 68, 0.95);
+  color: white;
+  border: 1px solid var(--danger);
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .saving-banner {
   margin: 0 0 1rem;
