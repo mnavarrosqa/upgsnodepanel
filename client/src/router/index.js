@@ -13,6 +13,7 @@ const routes = [
       { path: 'apps', name: 'Apps', component: () => import('../views/Apps.vue') },
       { path: 'apps/:id', name: 'AppDetail', component: () => import('../views/AppDetail.vue') },
       { path: 'maintenance', name: 'Maintenance', component: () => import('../views/Maintenance.vue') },
+      { path: 'docs', name: 'Documentation', component: () => import('../views/Documentation.vue') },
     ],
   },
 ];
