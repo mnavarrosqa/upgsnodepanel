@@ -206,8 +206,10 @@ if [ "$PANEL_USER" != "root" ]; then
   NGINX_BIN_PATH="$(command -v nginx 2>/dev/null || echo '/usr/sbin/nginx')"
   CERTBOT_BIN_PATH="$(command -v certbot 2>/dev/null || echo '/usr/bin/certbot')"
   SUDOERS_FILE="/etc/sudoers.d/upgs-node-panel"
+  PAM_HELPER_PATH="$INSTALL_DIR/server/lib/auth-pam"
   {
     echo "Defaults:$PANEL_USER !requiretty"
+    echo "$PANEL_USER ALL=(root) NOPASSWD: SETENV: $PAM_HELPER_PATH"
     echo "$PANEL_USER ALL=(root) NOPASSWD: $NGINX_BIN_PATH -t, $NGINX_BIN_PATH -s reload"
     echo "$PANEL_USER ALL=(root) NOPASSWD: $CERTBOT_BIN_PATH certonly *"
   } > "$SUDOERS_FILE"

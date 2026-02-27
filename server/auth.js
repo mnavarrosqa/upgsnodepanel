@@ -6,16 +6,19 @@ import fs from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PAM_HELPER = path.join(__dirname, 'lib', 'auth-pam');
+const SUDO_BIN = '/usr/bin/sudo';
+
+// When panel runs as non-root, PAM can only verify that user's password. Run helper as root via sudo so any system user can log in.
+const isRoot = typeof process.getuid === 'function' && process.getuid() === 0;
 
 let pamAuthenticatePromise = null;
 if (fs.existsSync(PAM_HELPER) && fs.statSync(PAM_HELPER).mode & 0o111) {
   // Use compiled PAM helper (preferred, no npm native module needed)
   pamAuthenticatePromise = (opts) => {
-    const result = spawnSync(PAM_HELPER, [], {
-      encoding: 'utf8',
-      env: { ...process.env, PAM_USER: opts.username, PAM_PASSWORD: opts.password },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    const env = { ...process.env, PAM_USER: opts.username, PAM_PASSWORD: opts.password };
+    const result = isRoot
+      ? spawnSync(PAM_HELPER, [], { encoding: 'utf8', env, stdio: ['ignore', 'pipe', 'pipe'] })
+      : spawnSync(SUDO_BIN, ['-E', '--', PAM_HELPER], { encoding: 'utf8', env, stdio: ['ignore', 'pipe', 'pipe'] });
     if (result.status !== 0) throw new Error('auth failed');
   };
 } else {

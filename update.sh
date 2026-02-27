@@ -116,6 +116,18 @@ fi
 # Ensure panel user owns any files we just created (e.g. server/lib/auth-pam)
 chown -R "$PANEL_USER:$PANEL_USER" "$INSTALL_DIR"
 
+# If panel runs as non-root, ensure sudoers allows running PAM helper as root (for multi-user login)
+SUDOERS_FILE="/etc/sudoers.d/upgs-node-panel"
+PAM_HELPER_PATH="$INSTALL_DIR/server/lib/auth-pam"
+if [ "$PANEL_USER" != "root" ] && [ -f "$SUDOERS_FILE" ] && ! grep -q "SETENV:.*auth-pam" "$SUDOERS_FILE" 2>/dev/null; then
+  echo "[*] Adding PAM helper to sudoers for multi-user login..."
+  echo "$PANEL_USER ALL=(root) NOPASSWD: SETENV: $PAM_HELPER_PATH" >> "$SUDOERS_FILE"
+  if ! visudo -c -f "$SUDOERS_FILE" >/dev/null 2>&1; then
+    echo "[!] Sudoers invalid after edit. Removing added line."
+    grep -v "SETENV:.*auth-pam" "$SUDOERS_FILE" > "${SUDOERS_FILE}.tmp" && mv "${SUDOERS_FILE}.tmp" "$SUDOERS_FILE"
+  fi
+fi
+
 echo "[*] Installing Node dependencies..."
 sudo -u "$PANEL_USER" env HOME="$PANEL_HOME" NVM_DIR="$NVM_DIR" bash -c '
   cd "'"$INSTALL_DIR"'"

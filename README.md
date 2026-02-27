@@ -17,7 +17,7 @@ Manage and install Node.js apps on your VPS. Log in with your server username an
 - **Ubuntu 20, 22, 24, or 25** (installer supports these only)
 - root or sudo (installer must run with sudo; the panel then runs as the invoking user when you use `sudo ./install.sh`, or as root when run directly as root)
 - The installer installs: nginx, git, Node.js (via nvm), PM2, PAM dev headers
-- Optional: certbot for app SSL (installed by script when available). When the panel runs as a non-root user, nginx reload and certbot are invoked via sudo (the installer adds a sudoers rule).
+- Optional: certbot for app SSL (installed by script when available). When the panel runs as a non-root user, nginx reload and certbot are invoked via sudo (the installer adds a sudoers rule). The same sudoers file allows the PAM helper to run as root so any system user can log in, not only the panel user.
 
 ## Quick start (development)
 
