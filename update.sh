@@ -59,6 +59,9 @@ git fetch --depth 1 origin "$BRANCH"
 git reset --hard "origin/$BRANCH"
 git clean -fd -e .env
 
+# So npm install (run as PANEL_USER) can write package-lock.json and node_modules
+chown -R "$PANEL_USER:$PANEL_USER" "$INSTALL_DIR"
+
 # Ensure PAM auth helper exists and is compiled (create from source if missing after pull)
 mkdir -p server/lib
 if [ ! -f server/lib/auth-pam.c ]; then
@@ -107,6 +110,9 @@ fi
 if [ -f server/lib/auth-pam.c ]; then
   gcc -o server/lib/auth-pam server/lib/auth-pam.c -lpam 2>/dev/null && chmod 755 server/lib/auth-pam && chown "$PANEL_USER:$PANEL_USER" server/lib/auth-pam 2>/dev/null || true
 fi
+
+# Ensure panel user owns any files we just created (e.g. server/lib/auth-pam)
+chown -R "$PANEL_USER:$PANEL_USER" "$INSTALL_DIR"
 
 echo "[*] Installing Node dependencies..."
 sudo -u "$PANEL_USER" env HOME="$PANEL_HOME" NVM_DIR="$NVM_DIR" bash -c '
