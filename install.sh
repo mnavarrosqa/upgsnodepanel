@@ -73,7 +73,7 @@ sudo -u "$PANEL_USER" env HOME="$PANEL_HOME" NVM_DIR="$NVM_DIR" bash -c '
 
 # Symlink node, npm, pm2 so systemd and any shell see them (nvm path is not in service PATH)
 for bin in node npm pm2; do
-  B="$(sudo -u "$PANEL_USER" env HOME="$PANEL_HOME" NVM_DIR="$NVM_DIR" bash -c '. "$NVM_DIR/nvm.sh" && command -v '"$bin"'" 2>/dev/null)"
+  B="$(sudo -u "$PANEL_USER" env HOME="$PANEL_HOME" NVM_DIR="$NVM_DIR" bash -c '. "$NVM_DIR/nvm.sh" && command -v "'"$bin"'"' 2>/dev/null)"
   if [ -z "$B" ]; then
     echo "[!] $bin not found after install. Aborting."
     exit 1
@@ -105,7 +105,7 @@ echo "[*] Installing Node dependencies and building client..."
 echo "[*] (Deprecation warnings from transitive dependencies are normal and can be ignored.)"
 # Clean install so native modules are built for this system; run as panel user so ownership is correct
 rm -rf node_modules client/node_modules
-sudo -u "$PANEL_USER" env HOME="$PANEL_HOME" NVM_DIR="$NVM_DIR" bash -c 'cd "'"$INSTALL_DIR"'" && npm install'
+sudo -u "$PANEL_USER" env HOME="$PANEL_HOME" NVM_DIR="$NVM_DIR" bash -c "cd \"$INSTALL_DIR\" && npm install"
 # Compile PAM auth helper (no npm native module needed; works on all Node versions)
 mkdir -p server/lib
 if [ ! -f server/lib/auth-pam.c ]; then
@@ -161,7 +161,7 @@ if [ -f server/lib/auth-pam.c ]; then
     echo "[!] Could not compile PAM helper. Ensure libpam0g-dev is installed. Login may fail."
   fi
 fi
-sudo -u "$PANEL_USER" env HOME="$PANEL_HOME" NVM_DIR="$NVM_DIR" bash -c 'cd "'"$INSTALL_DIR"'/client" && npm install && npm run build'
+sudo -u "$PANEL_USER" env HOME="$PANEL_HOME" NVM_DIR="$NVM_DIR" bash -c "cd \"$INSTALL_DIR/client\" && npm install && npm run build"
 
 echo "[*] Creating .env..."
 if [ ! -f .env ]; then
