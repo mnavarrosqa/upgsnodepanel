@@ -1,7 +1,19 @@
 import { execSync, spawnSync } from 'child_process';
+import fs from 'fs';
 
 const NVM_DIR = process.env.NVM_DIR || `${process.env.HOME || '/root'}/.nvm`;
 const PM2_BIN_PATH = process.env.PM2_BIN || '/usr/local/bin/pm2';
+
+/**
+ * Path to bash for PM2 start scripts. Prefer BASH_PATH env, then /usr/bin/bash, else /bin/bash.
+ */
+export function getBashPath() {
+  if (process.env.BASH_PATH) return process.env.BASH_PATH;
+  try {
+    if (fs.existsSync('/usr/bin/bash')) return '/usr/bin/bash';
+  } catch (_) {}
+  return '/bin/bash';
+}
 
 /**
  * Run a shell command. Optionally wrap in bash with nvm sourced.

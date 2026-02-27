@@ -52,6 +52,24 @@ export function listVersions() {
 }
 
 /**
+ * Returns true if the requested Node version is available (installed or resolvable at runtime).
+ * 'lts' and 'node' are always considered available (nvm resolves at runtime).
+ * Numeric versions are matched by major (e.g. '20' matches installed '20.10.0') or exact match.
+ */
+export function isVersionAvailable(requested) {
+  if (!requested || typeof requested !== 'string') return false;
+  const r = requested.trim().toLowerCase();
+  if (r === 'lts' || r === 'node') return true;
+  const installed = listVersions();
+  const majorRequested = r.split('.')[0];
+  for (const v of installed) {
+    if (v === r) return true;
+    if (v.split('.')[0] === majorRequested) return true;
+  }
+  return false;
+}
+
+/**
  * Install a Node version via nvm. Returns { versions, stdout, stderr }.
  */
 export function installVersion(version) {

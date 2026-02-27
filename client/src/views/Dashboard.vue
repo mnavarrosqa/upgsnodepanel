@@ -67,7 +67,7 @@
       <div v-else class="apps-grid">
         <div v-for="app in apps" :key="app.id" class="card app-card">
           <div class="app-card__header">
-            <span class="badge" :class="app.status === 'running' ? 'badge-success' : 'badge-muted'">{{ app.status }}</span>
+            <span class="badge" :class="app.status === 'running' ? 'badge-success' : (app.status === 'unknown' ? 'badge-warn' : 'badge-muted')" :title="app.status_error ? (app.status + ': ' + app.status_error) : app.status">{{ app.status }}</span>
             <span v-if="app.size != null" class="app-card__size">{{ formatBytes(app.size) }}</span>
           </div>
           <h3 class="app-card__name">

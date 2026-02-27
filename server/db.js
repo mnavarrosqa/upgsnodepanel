@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { isPortInUseSync } from './lib/portCheck.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dbPath = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'panel.db');
@@ -82,9 +83,9 @@ export function getAvailablePort() {
   let tries = Math.min(range, 5000);
   while (tries-- > 0) {
     const port = min + Math.floor(Math.random() * range);
-    if (!used.has(port)) return port;
+    if (!used.has(port) && !isPortInUseSync(port)) return port;
   }
-  throw new Error('Could not find an available port');
+  throw new Error(`Could not find an available port in range ${min}-${max}. All ports are in use or reserved. Set APP_PORT_MIN and APP_PORT_MAX to a wider range or remove an app.`);
 }
 
 export function listApps() {

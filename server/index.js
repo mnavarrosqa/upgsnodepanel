@@ -9,6 +9,7 @@ import { SqliteSessionStore } from './lib/sessionStore.js';
 import { authRouter, requireAuth } from './auth.js';
 import { nodeRouter } from './routes/node.js';
 import * as db from './db.js';
+import * as appManager from './services/appManager.js';
 import { appsRouter } from './routes/apps.js';
 import { systemRouter } from './routes/system.js';
 import * as nginx from './services/nginx.js';
@@ -69,6 +70,9 @@ app.use((err, req, res, next) => {
   console.error(err);
   res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
 });
+
+db.initDb();
+appManager.migrateAppDirsToId();
 
 // On startup, write all app vhosts so domain configs are in sync (e.g. after .env path change)
 // Preserve SSL block when the app already has one (panel user may not be able to read /etc/letsencrypt)

@@ -1,11 +1,37 @@
 import path from 'path';
 import fs from 'fs';
 import AdmZip from 'adm-zip';
-import { run, runPm2, runGit } from '../lib/exec.js';
+import { run, runPm2, runGit, getBashPath } from '../lib/exec.js';
+import { isPortInUseSync } from '../lib/portCheck.js';
+import * as nodeManager from './nodeManager.js';
+import * as db from '../db.js';
 import { writeAppConfig, removeAppConfig, reloadNginx, certsExist, obtainCert, appConfigHasSsl } from './nginx.js';
 
 const APPS_BASE = process.env.APPS_BASE_PATH || '/var/www/upgs-node-apps';
 const NVM_DIR = process.env.NVM_DIR || `${process.env.HOME || '/root'}/.nvm`;
+
+/** Per-app lock for start/stop/restart so only one action runs at a time per app. */
+const inProgressAppIds = new Set();
+
+/**
+ * Run fn with an exclusive lock for this app. If another action is in progress for appId, throws.
+ * @param {number} appId
+ * @param {() => T} fn
+ * @returns {T}
+ */
+export function withAppAction(appId, fn) {
+  if (inProgressAppIds.has(appId)) {
+    const e = new Error('Start/stop/restart already in progress for this app');
+    e.code = 'APP_ACTION_BUSY';
+    throw e;
+  }
+  inProgressAppIds.add(appId);
+  try {
+    return fn();
+  } finally {
+    inProgressAppIds.delete(appId);
+  }
+}
 
 /** Env for PM2: force HOME and PM2_HOME so panel and shell use the same daemon. */
 function pm2Env(extra = {}) {
@@ -24,13 +50,34 @@ function pm2Name(app) {
 }
 
 function appDir(app) {
-  const safeName = String(app.name).replace(/[^a-zA-Z0-9_-]/g, '_');
-  return path.join(APPS_BASE, safeName);
+  return path.join(APPS_BASE, 'app-' + app.id);
 }
 
 /** Returns the absolute path of the app directory (for file explorer, etc.). */
 export function getAppDir(app) {
   return appDir(app);
+}
+
+/**
+ * One-time migration: move name-based app dirs to id-based (app-{id}).
+ * Safe to run on every startup; only renames when oldDir exists and newDir does not.
+ */
+export function migrateAppDirsToId() {
+  try {
+    db.initDb();
+    const apps = db.listApps();
+    for (const app of apps) {
+      const safeName = String(app.name).replace(/[^a-zA-Z0-9_-]/g, '_');
+      const oldDir = path.join(APPS_BASE, safeName);
+      const newDir = path.join(APPS_BASE, 'app-' + app.id);
+      if (oldDir !== newDir && fs.existsSync(oldDir) && !fs.existsSync(newDir)) {
+        fs.renameSync(oldDir, newDir);
+        console.log(`Migrated app dir: ${oldDir} -> ${newDir}`);
+      }
+    }
+  } catch (e) {
+    console.error('App dir migration failed:', e.message);
+  }
 }
 
 /**
@@ -193,6 +240,12 @@ const START_SCRIPT_NAME = '.upgs-start.sh';
 export function startApp(app) {
   const dir = appDir(app);
   if (!fs.existsSync(dir)) throw new Error('App directory not found.');
+  if (isPortInUseSync(app.port)) {
+    throw new Error(`Port ${app.port} is already in use. Change the app port in settings or stop the other process.`);
+  }
+  if (!nodeManager.isVersionAvailable(app.node_version || '20')) {
+    throw new Error(`Node version "${app.node_version || '20'}" is not installed. Install it in Node versions or choose an installed version.`);
+  }
   const name = pm2Name(app);
   const startCmd = app.start_cmd || 'npm start';
   const nodeVersion = app.node_version || '20';
@@ -209,7 +262,7 @@ export function startApp(app) {
   try {
     runPm2(['describe', name], { env: pm2Env() });
   } catch (_) {
-    runPm2(['start', '/usr/bin/bash', '--name', name, '--', scriptPath], {
+    runPm2(['start', getBashPath(), '--name', name, '--', scriptPath], {
       env: pm2Env({ PORT: String(app.port) }),
     });
     return;
@@ -249,10 +302,10 @@ export function getPm2Status(app) {
     const { stdout } = runPm2(['jlist'], { env: pm2Env() });
     const list = JSON.parse(stdout);
     const proc = list.find((p) => p.name === name);
-    if (!proc) return 'stopped';
-    return proc.pm2_env?.status === 'online' ? 'running' : 'stopped';
-  } catch (_) {
-    return 'stopped';
+    if (!proc) return { status: 'stopped' };
+    return { status: proc.pm2_env?.status === 'online' ? 'running' : 'stopped' };
+  } catch (e) {
+    return { status: 'unknown', error: e?.message || 'Could not determine status' };
   }
 }
 

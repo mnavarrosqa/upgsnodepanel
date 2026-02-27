@@ -6,7 +6,7 @@
         <div class="app-detail-title">
           <router-link to="/apps" class="app-detail-back">← Apps</router-link>
           <h1 class="page-title">{{ app.name }}</h1>
-          <span class="status-pill" :class="app.status === 'running' ? 'status-pill--running' : 'status-pill--stopped'" :title="'Status: ' + app.status">
+          <span class="status-pill" :class="app.status === 'running' ? 'status-pill--running' : (app.status === 'unknown' ? 'status-pill--unknown' : 'status-pill--stopped')" :title="app.status_error ? (app.status + ': ' + app.status_error) : ('Status: ' + app.status)">
             <span class="status-pill__dot"></span>
             {{ app.status }}
           </span>
@@ -973,7 +973,11 @@ async function doRedeploy() {
     const updated = await api.apps.redeploy(route.params.id, pullBody());
     app.value = updated;
     edit.value.branch = updated.branch ?? '';
-    setFeedback('success', 'Redeployed: pull, install, build, restart done.');
+    if (updated.deploy_warning) {
+      setFeedback('warn', updated.deploy_warning);
+    } else {
+      setFeedback('success', 'Redeployed: pull, install, build, restart done.');
+    }
   } catch (e) {
     setFeedback('error', e.message || 'Redeploy failed.');
   } finally {
@@ -996,9 +1000,12 @@ async function doDelete() {
   deleteError.value = '';
   deleting.value = true;
   try {
-    await api.apps.remove(route.params.id);
+    const data = await api.apps.remove(route.params.id);
     closeDeleteModal();
     router.push('/apps');
+    if (data.warnings && data.warnings.length > 0) {
+      setFeedback('warn', 'Deleted with warnings: ' + data.warnings.join(' '));
+    }
   } catch (e) {
     deleteError.value = e.message || 'Delete failed';
   } finally {
@@ -1054,6 +1061,11 @@ async function doDelete() {
   background: rgba(239, 68, 68, 0.95);
   color: white;
   border: 1px solid var(--danger);
+}
+.toast.warn {
+  background: rgba(234, 179, 8, 0.95);
+  color: rgba(0, 0, 0, 0.9);
+  border: 1px solid var(--warn, #ca8a04);
 }
 @keyframes toast-in {
   from {
@@ -1128,6 +1140,13 @@ async function doDelete() {
 }
 .status-pill--stopped .status-pill__dot {
   background: var(--text-muted);
+}
+.status-pill--unknown {
+  background: rgba(234, 179, 8, 0.2);
+  color: var(--warn, #ca8a04);
+}
+.status-pill--unknown .status-pill__dot {
+  background: var(--warn, #ca8a04);
 }
 .app-detail-actions {
   display: flex;

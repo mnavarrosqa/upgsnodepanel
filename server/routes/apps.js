@@ -40,11 +40,13 @@ function appToJson(row) {
   const domain = row.domain && String(row.domain).trim();
   const sslEnabled = Boolean(row.ssl_enabled);
   const sslActive = sslEnabled && domain && (nginx.certsExist(domain) || nginx.appConfigHasSsl(row.id));
+  const pm2 = appManager.getPm2Status(row);
   return {
     ...row,
     ssl_enabled: sslEnabled,
     ssl_active: sslActive,
-    status: appManager.getPm2Status(row),
+    status: pm2.status,
+    status_error: pm2.error || undefined,
     size: appManager.getAppSize(row),
   };
 }
@@ -334,17 +336,32 @@ appsRouter.delete('/:id', (req, res, next) => {
     const app = db.getApp(req.params.id);
     if (!app) return res.status(404).json({ error: 'App not found' });
     const dir = appManager.appDir(app);
-    appManager.deleteFromPm2(app);
-    appManager.teardownNginx(app);
+    const warnings = [];
+    try {
+      appManager.deleteFromPm2(app);
+    } catch (e) {
+      console.warn('Could not remove from PM2:', e.message);
+      warnings.push('Could not remove from PM2: ' + (e.message || 'unknown'));
+    }
+    try {
+      appManager.teardownNginx(app);
+    } catch (e) {
+      console.warn('Could not remove nginx config:', e.message);
+      warnings.push('Could not remove nginx config: ' + (e.message || 'unknown'));
+    }
     db.deleteApp(req.params.id);
     try {
       if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true });
-    } catch (err) {
-      console.warn('Could not remove app directory:', dir, err.message);
+    } catch (e) {
+      console.warn('Could not remove app directory:', dir, e.message);
+      warnings.push('Could not remove app directory: ' + (e.message || 'unknown'));
     }
     try {
       db.addActivity(app.id, app.name, 'deleted');
     } catch (_) {}
+    if (warnings.length > 0) {
+      return res.json({ ok: true, warnings });
+    }
     res.json({ ok: true });
   } catch (e) {
     next(e);
@@ -355,12 +372,16 @@ appsRouter.post('/:id/start', (req, res, next) => {
   try {
     const app = db.getApp(req.params.id);
     if (!app) return res.status(404).json({ error: 'App not found' });
-    appManager.startApp(app);
+    appManager.withAppAction(app.id, () => {
+      appManager.startApp(app);
+    });
     try {
       db.addActivity(app.id, app.name, 'started');
     } catch (_) {}
-    res.json({ status: appManager.getPm2Status(app) });
+    const pm2 = appManager.getPm2Status(app);
+    res.json({ status: pm2.status, status_error: pm2.error || undefined });
   } catch (e) {
+    if (e.code === 'APP_ACTION_BUSY') return res.status(409).json({ error: e.message });
     res.status(500).json({ error: e.message });
   }
 });
@@ -369,12 +390,16 @@ appsRouter.post('/:id/stop', (req, res, next) => {
   try {
     const app = db.getApp(req.params.id);
     if (!app) return res.status(404).json({ error: 'App not found' });
-    appManager.stopApp(app);
+    appManager.withAppAction(app.id, () => {
+      appManager.stopApp(app);
+    });
     try {
       db.addActivity(app.id, app.name, 'stopped');
     } catch (_) {}
-    res.json({ status: appManager.getPm2Status(app) });
+    const pm2 = appManager.getPm2Status(app);
+    res.json({ status: pm2.status, status_error: pm2.error || undefined });
   } catch (e) {
+    if (e.code === 'APP_ACTION_BUSY') return res.status(409).json({ error: e.message });
     res.status(500).json({ error: e.message });
   }
 });
@@ -383,12 +408,16 @@ appsRouter.post('/:id/restart', (req, res, next) => {
   try {
     const app = db.getApp(req.params.id);
     if (!app) return res.status(404).json({ error: 'App not found' });
-    appManager.restartApp(app);
+    appManager.withAppAction(app.id, () => {
+      appManager.restartApp(app);
+    });
     try {
       db.addActivity(app.id, app.name, 'restarted');
     } catch (_) {}
-    res.json({ status: appManager.getPm2Status(app) });
+    const pm2 = appManager.getPm2Status(app);
+    res.json({ status: pm2.status, status_error: pm2.error || undefined });
   } catch (e) {
+    if (e.code === 'APP_ACTION_BUSY') return res.status(409).json({ error: e.message });
     res.status(500).json({ error: e.message });
   }
 });
@@ -445,8 +474,19 @@ appsRouter.post('/:id/redeploy', (req, res, next) => {
     appManager.cloneApp(appToUse);
     const installOut = appManager.runInstall(current);
     if (current.build_cmd) appManager.runBuild(current);
-    appManager.restartApp(current);
-    res.json(appToJson(db.getApp(current.id)));
+    let deployWarning = null;
+    try {
+      appManager.restartApp(current);
+    } catch (e) {
+      try {
+        appManager.startApp(current);
+      } catch (e2) {
+        deployWarning = 'Deployed but app could not be started: ' + (e2.message || 'unknown');
+      }
+    }
+    const finalApp = appToJson(db.getApp(current.id));
+    if (deployWarning) finalApp.deploy_warning = deployWarning;
+    res.json(finalApp);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

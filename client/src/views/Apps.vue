@@ -295,7 +295,7 @@
                 <span v-else-if="app.ssl_enabled" class="badge badge-warn" title="Certificate pending">SSL …</span>
                 <span v-else class="ssl-off">—</span>
               </td>
-              <td><span class="badge" :class="app.status === 'running' ? 'badge-success' : 'badge-muted'">{{ app.status }}</span></td>
+              <td><span class="badge" :class="app.status === 'running' ? 'badge-success' : (app.status === 'unknown' ? 'badge-warn' : 'badge-muted')" :title="app.status_error ? (app.status + ': ' + app.status_error) : app.status">{{ app.status }}</span></td>
               <td>
                 <div class="list-actions">
                   <router-link :to="`/apps/${app.id}`" class="btn btn-sm">Open</router-link>
@@ -665,9 +665,12 @@ async function doDelete() {
   deleteError.value = '';
   deleting.value = true;
   try {
-    await api.apps.remove(appToDelete.value.id);
+    const data = await api.apps.remove(appToDelete.value.id);
     closeDeleteModal();
     await load();
+    if (data.warnings && data.warnings.length > 0) {
+      showToast('warn', 'Deleted with warnings: ' + data.warnings.join(' '));
+    }
   } catch (e) {
     deleteError.value = e.message || 'Delete failed';
   } finally {
@@ -1202,6 +1205,11 @@ function closeCreationOverlay() {
   background: rgba(239, 68, 68, 0.95);
   color: white;
   border: 1px solid var(--danger);
+}
+.toast.warn {
+  background: rgba(234, 179, 8, 0.95);
+  color: rgba(0, 0, 0, 0.9);
+  border: 1px solid var(--warn, #ca8a04);
 }
 @keyframes toast-in {
   from {
