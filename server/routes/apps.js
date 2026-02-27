@@ -153,6 +153,9 @@ appsRouter.post('/from-zip', upload.single('zip'), async (req, res, next) => {
       appManager.startApp(app);
       await send({ step: 'start_done' });
       const finalApp = appToJson(db.getApp(app.id));
+      try {
+        db.addActivity(finalApp.id, finalApp.name, 'created');
+      } catch (_) {}
       if (stream) {
         writeStreamLine(res, { done: true, app: finalApp, sslWarning: nginxResult.sslError || undefined });
         await flushStream();
@@ -253,6 +256,9 @@ appsRouter.post('/', async (req, res, next) => {
       await send({ step: 'start_done' });
 
       const finalApp = appToJson(db.getApp(app.id));
+      try {
+        db.addActivity(finalApp.id, finalApp.name, 'created');
+      } catch (_) {}
       if (stream) {
         writeStreamLine(res, { done: true, app: finalApp, sslWarning: nginxResult.sslError || undefined });
         await flushStream();
@@ -327,6 +333,9 @@ appsRouter.delete('/:id', (req, res, next) => {
     } catch (err) {
       console.warn('Could not remove app directory:', dir, err.message);
     }
+    try {
+      db.addActivity(app.id, app.name, 'deleted');
+    } catch (_) {}
     res.json({ ok: true });
   } catch (e) {
     next(e);
@@ -338,6 +347,9 @@ appsRouter.post('/:id/start', (req, res, next) => {
     const app = db.getApp(req.params.id);
     if (!app) return res.status(404).json({ error: 'App not found' });
     appManager.startApp(app);
+    try {
+      db.addActivity(app.id, app.name, 'started');
+    } catch (_) {}
     res.json({ status: appManager.getPm2Status(app) });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -349,6 +361,9 @@ appsRouter.post('/:id/stop', (req, res, next) => {
     const app = db.getApp(req.params.id);
     if (!app) return res.status(404).json({ error: 'App not found' });
     appManager.stopApp(app);
+    try {
+      db.addActivity(app.id, app.name, 'stopped');
+    } catch (_) {}
     res.json({ status: appManager.getPm2Status(app) });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -360,6 +375,9 @@ appsRouter.post('/:id/restart', (req, res, next) => {
     const app = db.getApp(req.params.id);
     if (!app) return res.status(404).json({ error: 'App not found' });
     appManager.restartApp(app);
+    try {
+      db.addActivity(app.id, app.name, 'restarted');
+    } catch (_) {}
     res.json({ status: appManager.getPm2Status(app) });
   } catch (e) {
     res.status(500).json({ error: e.message });

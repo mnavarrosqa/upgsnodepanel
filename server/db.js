@@ -44,6 +44,15 @@ function initSchema(database) {
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     );
+    CREATE TABLE IF NOT EXISTS activities (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      app_id INTEGER,
+      app_name TEXT NOT NULL,
+      action TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS activities_created_at ON activities(created_at);
+    CREATE INDEX IF NOT EXISTS activities_app_id ON activities(app_id);
   `);
 }
 
@@ -138,6 +147,26 @@ export function updateApp(id, data) {
 export function deleteApp(id) {
   const database = getDb();
   database.prepare('DELETE FROM apps WHERE id = ?').run(Number(id));
+}
+
+export function addActivity(appId, appName, action) {
+  const database = getDb();
+  const stmt = database.prepare(`
+    INSERT INTO activities (app_id, app_name, action)
+    VALUES (?, ?, ?)
+  `);
+  stmt.run(appId != null ? Number(appId) : null, appName || '', action || '');
+}
+
+export function listActivities(limit = 20) {
+  const database = getDb();
+  const safeLimit = Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 100) : 20;
+  return database.prepare(`
+    SELECT id, app_id, app_name, action, created_at
+    FROM activities
+    ORDER BY datetime(created_at) DESC, id DESC
+    LIMIT ?
+  `).all(safeLimit);
 }
 
 export { getDb };

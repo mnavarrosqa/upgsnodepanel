@@ -200,5 +200,6 @@ export const api = {
     generateSshPublicKey: () => request('/api/system/ssh-public-key/generate', { method: 'POST' }),
     maintenanceOptions: () => request('/api/system/maintenance'),
     cleanMaintenance: (items) => request('/api/system/maintenance/clean', { method: 'POST', body: JSON.stringify({ items }) }),
+    activity: (limit) => request(`/api/system/activity?limit=${encodeURIComponent(limit || 20)}`),
   },
 };

@@ -5,6 +5,7 @@ import os from 'os';
 import path from 'path';
 import dns from 'dns/promises';
 import { run, runGit, runPm2 } from '../lib/exec.js';
+import * as db from '../db.js';
 
 export const systemRouter = Router();
 
@@ -282,6 +283,17 @@ systemRouter.get('/maintenance', (req, res, next) => {
   try {
     const options = getMaintenanceOverview();
     res.json({ options });
+  } catch (e) {
+    next(e);
+  }
+});
+
+systemRouter.get('/activity', (req, res, next) => {
+  try {
+    const rawLimit = Number.parseInt(String(req.query.limit ?? ''), 10);
+    const limit = Number.isFinite(rawLimit) ? rawLimit : 20;
+    const events = db.listActivities(limit);
+    res.json({ events });
   } catch (e) {
     next(e);
   }
