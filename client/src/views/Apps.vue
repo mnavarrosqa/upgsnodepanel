@@ -117,9 +117,13 @@
     <div v-if="creating || creationDone" class="creation-overlay" @click.self="closeCreationOverlay">
       <div class="creation-modal card">
         <div v-if="creating" class="creation-progress">
-          <h3 style="margin:0 0 0.5rem; font-size:1rem;">Creating app…</h3>
-          <p style="margin:0 0 0.5rem; font-size:0.875rem; color:var(--text-muted);">{{ creationStep }}</p>
-          <pre class="creation-logs">{{ creationLogs }}</pre>
+          <h3 style="margin:0 0 0.75rem; font-size:1rem;">Creating app…</h3>
+          <div class="creation-progress-bar" role="progressbar" :aria-valuenow="creationProgress" aria-valuemin="0" aria-valuemax="100">
+            <div class="creation-progress-fill" :style="{ width: creationProgress + '%' }"></div>
+          </div>
+          <p class="creation-step-label">{{ creationStep }}</p>
+          <p class="creation-log-label">Live log</p>
+          <pre ref="creationLogsEl" class="creation-logs">{{ creationLogs }}</pre>
         </div>
         <div v-else class="creation-done">
           <h3 style="margin:0 0 0.5rem; font-size:1rem;">{{ createError ? 'Creation failed' : 'App created' }}</h3>
@@ -204,7 +208,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, nextTick } from 'vue';
 import { api } from '../api';
 
 const apps = ref([]);
@@ -214,6 +218,8 @@ const creationDone = ref(false);
 const createError = ref('');
 const creationStep = ref('');
 const creationLogs = ref('');
+const creationProgress = ref(0);
+const creationLogsEl = ref(null);
 const creationSslWarning = ref('');
 const domainCheckStatus = ref('');
 const domainCheckMessage = ref('');
@@ -463,6 +469,23 @@ const stepLabels = {
   start_done: 'App started',
 };
 
+const stepProgress = {
+  clone: 10,
+  clone_done: 15,
+  extract: 5,
+  extract_done: 10,
+  install: 25,
+  install_done: 35,
+  build: 45,
+  build_done: 55,
+  nginx: 65,
+  ssl: 72,
+  ssl_done: 78,
+  nginx_done: 80,
+  start: 90,
+  start_done: 100,
+};
+
 function appendLogs(logs, stdout, stderr) {
   if (stdout && stdout.trim()) logs.push(stdout.trim());
   if (stderr && stderr.trim()) logs.push(stderr.trim());
@@ -471,10 +494,16 @@ function appendLogs(logs, stdout, stderr) {
 function handleCreateEvent(ev) {
   if (ev.step) {
     creationStep.value = ev.message || stepLabels[ev.step] || ev.step;
+    const p = stepProgress[ev.step];
+    if (p != null) creationProgress.value = Math.max(creationProgress.value, p);
     if (ev.stdout || ev.stderr) {
       const lines = creationLogs.value ? creationLogs.value.split('\n') : [];
       appendLogs(lines, ev.stdout, ev.stderr);
       creationLogs.value = lines.join('\n');
+      nextTick(() => {
+        const el = creationLogsEl.value;
+        if (el) el.scrollTop = el.scrollHeight;
+      });
     }
     if (ev.sslError) creationLogs.value = (creationLogs.value ? creationLogs.value + '\n' : '') + ev.sslError;
   }
@@ -485,6 +514,7 @@ async function create() {
   createError.value = '';
   creationStep.value = 'Starting…';
   creationLogs.value = '';
+  creationProgress.value = 0;
   creating.value = true;
   try {
     let result;
@@ -533,6 +563,7 @@ function closeCreationOverlay() {
   creationDone.value = false;
   creationStep.value = '';
   creationLogs.value = '';
+  creationProgress.value = 0;
   createError.value = '';
   creationSslWarning.value = '';
 }
@@ -588,6 +619,32 @@ function closeCreationOverlay() {
 .creation-progress {
   flex: 1;
   min-height: 0;
+}
+.creation-progress-bar {
+  height: 8px;
+  background: var(--bg);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 0.75rem;
+}
+.creation-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.25s ease-out;
+}
+.creation-step-label {
+  margin: 0 0 0.5rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+.creation-log-label {
+  margin: 0 0 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
 }
 .creation-done {
   flex: 1;
