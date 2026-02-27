@@ -97,21 +97,26 @@
           <h2 class="card__title">Edit</h2>
           <form @submit.prevent="save" class="edit-form">
             <fieldset :disabled="saving">
-              <div class="form-group">
-                <label>Domain</label>
-                <div class="domain-row">
-                  <input v-model="edit.domain" type="text" placeholder="app.example.com" class="domain-row__input" />
-                  <label class="domain-row__ssl">
-                    <input v-model="edit.ssl_enabled" type="checkbox" />
-                    <span>SSL</span>
-                  </label>
+              <div class="edit-form__section">
+                <h3 class="edit-form__section-title">Access</h3>
+                <div class="form-group">
+                  <label>Domain</label>
+                  <div class="domain-row">
+                    <input v-model="edit.domain" type="text" placeholder="app.example.com" class="domain-row__input" />
+                    <label class="domain-row__ssl">
+                      <input v-model="edit.ssl_enabled" type="checkbox" />
+                      <span>SSL</span>
+                    </label>
+                  </div>
+                </div>
+                <div v-if="!isUploadApp" class="form-group">
+                  <label>Branch, tag, or commit</label>
+                  <input v-model="edit.branch" type="text" placeholder="main, v1.0.0, or abc1234" />
                 </div>
               </div>
-              <div v-if="!isUploadApp" class="form-group">
-                <label>Branch, tag, or commit</label>
-                <input v-model="edit.branch" type="text" placeholder="main, v1.0.0, or abc1234" />
-              </div>
-              <div class="form-row form-row--3">
+
+              <div class="edit-form__section">
+                <h3 class="edit-form__section-title">Runtime &amp; commands</h3>
                 <div class="form-group">
                   <label>Node version</label>
                   <select v-if="nodeVersionOptions.length" v-model="edit.node_version">
@@ -119,32 +124,39 @@
                   </select>
                   <span v-else class="form-static">{{ app.node_version || '—' }}</span>
                 </div>
-                <div class="form-group">
-                  <label>Install command</label>
-                  <input v-model="edit.install_cmd" type="text" placeholder="npm install" />
+                <div class="form-row form-row--3">
+                  <div class="form-group">
+                    <label>Install command</label>
+                    <input v-model="edit.install_cmd" type="text" placeholder="npm install" />
+                  </div>
+                  <div class="form-group">
+                    <label>Build command</label>
+                    <input v-model="edit.build_cmd" type="text" placeholder="npm run build" />
+                  </div>
+                  <div class="form-group">
+                    <label>Start command</label>
+                    <input v-model="edit.start_cmd" type="text" placeholder="npm start" />
+                  </div>
                 </div>
-                <div class="form-group">
-                  <label>Build command</label>
-                  <input v-model="edit.build_cmd" type="text" placeholder="npm run build" />
+                <p class="edit-form__note">Start command and Node version apply on next start or restart.</p>
+              </div>
+
+              <div class="edit-form__section">
+                <h3 class="edit-form__section-title">Restart policy</h3>
+                <div class="form-row form-row--2">
+                  <div class="form-group">
+                    <label>Max restarts</label>
+                    <input v-model.number="edit.max_restarts" type="number" min="0" max="999999" placeholder="Default" step="1" />
+                    <p class="form-hint">Stop after this many restarts (0–999999). Empty = default.</p>
+                  </div>
+                  <div class="form-group">
+                    <label>Restart delay (ms)</label>
+                    <input v-model.number="edit.restart_delay" type="number" min="0" max="600000" placeholder="Default" step="1" />
+                    <p class="form-hint">Delay between restarts. Empty = default.</p>
+                  </div>
                 </div>
               </div>
-              <div class="form-group">
-                <label>Start command</label>
-                <input v-model="edit.start_cmd" type="text" placeholder="npm start" />
-              </div>
-              <p class="card__muted card__muted--small">Start command and Node version apply on next start or restart.</p>
-              <div class="form-row form-row--2">
-                <div class="form-group">
-                  <label>Max restarts</label>
-                  <input v-model.number="edit.max_restarts" type="number" min="0" max="999999" placeholder="Default" step="1" />
-                  <p class="form-hint">Optional. PM2 will stop restarting after this many restarts (0–999999). Empty = default.</p>
-                </div>
-                <div class="form-group">
-                  <label>Restart delay (ms)</label>
-                  <input v-model.number="edit.restart_delay" type="number" min="0" max="600000" placeholder="Default" step="1" />
-                  <p class="form-hint">Optional. Delay between restarts in ms (0–600000). Empty = default.</p>
-                </div>
-              </div>
+
               <button type="submit" class="btn btn-primary" :disabled="saving">{{ saving ? 'Saving…' : 'Save' }}</button>
             </fieldset>
           </form>
@@ -1347,6 +1359,27 @@ async function doDelete() {
 }
 .edit-form .form-row {
   margin-bottom: 1rem;
+}
+.edit-form__section {
+  margin-bottom: 1.75rem;
+}
+.edit-form__section:last-of-type {
+  margin-bottom: 1rem;
+}
+.edit-form__section-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin: 0 0 0.75rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--border);
+}
+.edit-form__note {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  margin: 0.5rem 0 0;
 }
 .detail-tabs {
   display: flex;
