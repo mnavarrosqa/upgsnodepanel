@@ -21,8 +21,20 @@
           </span>
           Apps
         </router-link>
+        <router-link to="/maintenance" class="sidebar-nav__item">
+          <span class="sidebar-nav__icon" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+          </span>
+          Maintenance
+        </router-link>
+        <router-link to="/docs" class="sidebar-nav__item">
+          <span class="sidebar-nav__icon" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
+          </span>
+          Documentation
+        </router-link>
         <section class="sidebar-section sidebar-section--activity" aria-label="Recent app activity">
-          <h3 class="sidebar-section__title">Activity</h3>
+          <h3 class="sidebar-section__title">Recent activity</h3>
           <p v-if="activityError" class="sidebar-section__error">{{ activityError }}</p>
           <p v-else-if="!activity.length" class="sidebar-section__empty">No recent app activity.</p>
           <ul v-else class="activity-list">
@@ -40,22 +52,18 @@
             </li>
           </ul>
         </section>
-        <router-link to="/maintenance" class="sidebar-nav__item">
-          <span class="sidebar-nav__icon" aria-hidden="true">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
-          </span>
-          Maintenance
-        </router-link>
-        <router-link to="/docs" class="sidebar-nav__item">
-          <span class="sidebar-nav__icon" aria-hidden="true">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
-          </span>
-          Documentation
-        </router-link>
       </nav>
       <div class="sidebar-footer">
-        <span class="sidebar-user">{{ user }}</span>
-        <button type="button" class="btn" @click="logout">Log out</button>
+        <div class="sidebar-user-block">
+          <span class="sidebar-user-block__icon" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </span>
+          <div class="sidebar-user-block__text">
+            <span class="sidebar-user-block__label">Server user</span>
+            <span class="sidebar-user-block__name">{{ user || '—' }}</span>
+          </div>
+        </div>
+        <button type="button" class="btn btn--ghost" @click="logout">Log out</button>
       </div>
     </aside>
     <main class="main">
@@ -146,16 +154,62 @@ a.router-link-active .sidebar-nav__icon {
   margin-top: auto;
   padding: 1rem;
   border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
 }
-.sidebar-user {
-  display: block;
-  font-size: 0.8rem;
+.sidebar-user-block {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius);
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+}
+.sidebar-user-block__icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--bg-hover);
   color: var(--text-muted);
-  margin-bottom: 0.5rem;
+}
+.sidebar-user-block__text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+.sidebar-user-block__label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+.sidebar-user-block__name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .sidebar .btn {
   width: 100%;
   justify-content: center;
+}
+.sidebar .btn--ghost {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+.sidebar .btn--ghost:hover {
+  background: var(--bg-hover);
+  color: var(--text);
 }
 
 .sidebar-section {
