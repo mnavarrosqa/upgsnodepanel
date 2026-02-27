@@ -287,6 +287,32 @@ systemRouter.get('/maintenance', (req, res, next) => {
   }
 });
 
+/** Returns the server's SSH public key for use as a deploy key (git clone via SSH). */
+systemRouter.get('/ssh-public-key', (req, res, next) => {
+  try {
+    const home = process.env.HOME || '/root';
+    const sshDir = path.join(home, '.ssh');
+    const keyFiles = ['id_ed25519.pub', 'id_rsa.pub'];
+    for (const name of keyFiles) {
+      const filePath = path.join(sshDir, name);
+      try {
+        if (fs.existsSync(filePath)) {
+          const content = fs.readFileSync(filePath, 'utf8').trim();
+          if (content && !content.includes('\n')) {
+            return res.json({ publicKey: content });
+          }
+        }
+      } catch (_) {}
+    }
+    res.json({
+      publicKey: null,
+      error: 'No SSH key found. On the server run: ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519',
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
 function getSizeBeforeClean(id) {
   if (id === 'npm_cache') {
     const cachePath = getNpmCachePath();

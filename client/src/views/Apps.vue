@@ -43,8 +43,17 @@
             <p class="private-repo-info__title">To clone a private repository you need one of the following:</p>
             <ul class="private-repo-info__list">
               <li><strong>HTTPS with token</strong> — Use a Personal Access Token (PAT) in the URL: <code>https://YOUR_TOKEN@github.com/user/repo.git</code>. Create a PAT with repo scope in GitHub (Settings → Developer settings) or GitLab (Preferences → Access Tokens). Do not share your token.</li>
-              <li><strong>SSH</strong> — Use an SSH URL: <code>git@github.com:user/repo.git</code>. Add the server’s SSH public key as a deploy key in the repository settings (GitHub: Settings → Deploy keys; GitLab: Settings → Repository → Deploy keys).</li>
+              <li><strong>SSH</strong> — Use an SSH URL: <code>git@github.com:user/repo.git</code>. Add the server’s SSH public key below as a deploy key in the repository settings (GitHub: Settings → Deploy keys; GitLab: Settings → Repository → Deploy keys).</li>
             </ul>
+            <div v-if="repoVisibility === 'private'" class="private-repo-info__ssh-key">
+              <p class="private-repo-info__ssh-key-label">Server SSH public key to add as deploy key:</p>
+              <div v-if="sshKeyLoading" class="private-repo-info__ssh-key-loading">Loading…</div>
+              <div v-else-if="sshKeyError" class="private-repo-info__ssh-key-error">{{ sshKeyError }}</div>
+              <div v-else-if="sshPublicKey" class="private-repo-info__ssh-key-block">
+                <code class="private-repo-info__ssh-key-content">{{ sshPublicKey }}</code>
+                <button type="button" class="btn btn-small private-repo-info__copy" @click="copySshKey" aria-label="Copy key">{{ copySshKeyFeedback ? 'Copied!' : 'Copy' }}</button>
+              </div>
+            </div>
             <p class="private-repo-info__note">“Suggest from repo” only works for public repos; for private repos fill install/build/start commands manually or use a preset.</p>
           </div>
         </div>
@@ -329,7 +338,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { api } from '../api';
 
 const apps = ref([]);
@@ -354,6 +363,10 @@ const suggestError = ref('');
 const openHelpId = ref(null);
 const helpPinned = ref(false);
 const repoVisibility = ref('public');
+const sshPublicKey = ref(null);
+const sshKeyLoading = ref(false);
+const sshKeyError = ref('');
+const copySshKeyFeedback = ref(false);
 
 const fieldHelp = {
   name: 'A short identifier for your app (e.g. my-app). Used in the app list and on the server.',
@@ -385,6 +398,37 @@ function onHelpClick(id) {
     helpPinned.value = true;
   }
 }
+
+async function fetchSshPublicKey() {
+  sshKeyLoading.value = true;
+  sshKeyError.value = '';
+  sshPublicKey.value = null;
+  try {
+    const data = await api.system.sshPublicKey();
+    sshPublicKey.value = data.publicKey || null;
+    if (data.error) sshKeyError.value = data.error;
+  } catch (e) {
+    sshKeyError.value = e.message || 'Could not load SSH key';
+  } finally {
+    sshKeyLoading.value = false;
+  }
+}
+
+function copySshKey() {
+  if (!sshPublicKey.value) return;
+  navigator.clipboard.writeText(sshPublicKey.value).then(() => {
+    copySshKeyFeedback.value = true;
+    setTimeout(() => { copySshKeyFeedback.value = false; }, 2000);
+  });
+}
+
+watch(repoVisibility, (val) => {
+  if (val === 'private') fetchSshPublicKey();
+  else {
+    sshPublicKey.value = null;
+    sshKeyError.value = '';
+  }
+});
 
 const presets = [
   { id: 'nuxt3', label: 'Nuxt 3', install_cmd: 'npm install', build_cmd: 'npm run build', start_cmd: 'node .output/server/index.mjs', node_version: '20' },
@@ -510,6 +554,8 @@ function closeForm() {
   branchDetected.value = '';
   suggestError.value = '';
   repoVisibility.value = 'public';
+  sshPublicKey.value = null;
+  sshKeyError.value = '';
 }
 
 async function doStart(app) {
@@ -716,6 +762,8 @@ async function create() {
     form.value = { ...DEFAULT_FORM, node_version: nodeVersions.value[0] || DEFAULT_FORM.node_version };
     selectedPresetId.value = '';
     repoVisibility.value = 'public';
+    sshPublicKey.value = null;
+    sshKeyError.value = '';
     suggestError.value = '';
     zipFile.value = null;
     domainCheckStatus.value = '';
