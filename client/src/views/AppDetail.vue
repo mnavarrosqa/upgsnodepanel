@@ -157,7 +157,7 @@
         </section>
         <section class="card card--files">
           <h2 class="card__title">File explorer</h2>
-          <p class="card__muted">Browse and manage files in this app’s directory. Text files under 512 KB can be viewed and edited.</p>
+          <p class="card__muted">Browse and manage files in this app’s directory. Text files under 512 KB can be viewed and edited. Upload up to 250 MB per file.</p>
           <div v-if="app.size == null" class="card__muted">App directory not created yet. Create or deploy the app first.</div>
           <template v-else>
             <div class="files-toolbar">
@@ -169,8 +169,12 @@
                 </template>
               </nav>
               <div class="files-actions">
+                <input ref="uploadInputRef" type="file" multiple class="files-upload-input" accept="*" @change="onUploadFiles" />
+                <button type="button" class="btn btn-sm" @click="triggerUpload" :disabled="filesBusy || filesUploading">{{ filesUploading ? 'Uploading…' : 'Upload' }}</button>
                 <button type="button" class="btn btn-sm" @click="openNewFileModal" :disabled="filesBusy">New file</button>
                 <button type="button" class="btn btn-sm" @click="openNewFolderModal" :disabled="filesBusy">New folder</button>
+                <button type="button" class="btn btn-sm" @click="doCompressSelected" :disabled="filesBusy || fileExplorerSelectedPaths.length === 0">{{ filesCompressing ? 'Compressing…' : 'Compress selected' }}</button>
+                <button type="button" class="btn btn-sm" @click="doUncompressSelected" :disabled="filesBusy || !canUncompressSelected">{{ filesUncompressing ? 'Extracting…' : 'Uncompress selected' }}</button>
                 <button type="button" class="btn btn-sm" @click="loadFileList()" :disabled="filesBusy">Refresh</button>
               </div>
             </div>
@@ -180,6 +184,11 @@
               <table class="files-table">
                 <thead>
                   <tr>
+                    <th class="files-table__th-check">
+                      <label class="files-table__check-label">
+                        <input type="checkbox" :checked="isAllSelected" :indeterminate.prop="isSomeSelected && !isAllSelected" @change="toggleSelectAll" aria-label="Select all" />
+                      </label>
+                    </th>
                     <th>Name</th>
                     <th>Size</th>
                     <th>Actions</th>
@@ -187,6 +196,11 @@
                 </thead>
                 <tbody>
                   <tr v-for="entry in fileExplorerEntries" :key="entry.path" class="files-table__row">
+                    <td class="files-table__td-check">
+                      <label class="files-table__check-label">
+                        <input type="checkbox" :checked="fileExplorerSelectedPaths.includes(entry.path)" @change="toggleSelect(entry.path)" aria-label="Select" />
+                      </label>
+                    </td>
                     <td>
                       <button v-if="entry.isDirectory" type="button" class="files-table__link" @click="navigateInto(entry)">
                         <span class="files-table__icon" aria-hidden="true">📁</span>
@@ -296,6 +310,20 @@
         </div>
       </div>
     </div>
+    <div v-if="fileExplorerModal === 'compress'" class="modal-overlay" @click.self="closeFileModal">
+      <div class="modal">
+        <h3 class="modal__title">Compress selected ({{ fileExplorerSelectedPaths.length }} item(s))</h3>
+        <div class="form-group">
+          <label>Archive name</label>
+          <input v-model="fileExplorerCompressName" type="text" placeholder="archive.zip" />
+        </div>
+        <p v-if="fileExplorerContentError" class="card__error">{{ fileExplorerContentError }}</p>
+        <div class="modal__actions">
+          <button type="button" class="btn btn-primary" @click="submitCompress" :disabled="filesCompressing">{{ filesCompressing ? 'Compressing…' : 'Compress' }}</button>
+          <button type="button" class="btn" @click="closeFileModal">Cancel</button>
+        </div>
+      </div>
+    </div>
     <div v-if="showDeleteModal" class="modal-overlay" @click.self="closeDeleteModal">
       <div class="confirm-dialog confirm-dialog--danger">
         <div class="confirm-dialog__icon" aria-hidden="true">
@@ -386,9 +414,36 @@ const fileExplorerContentError = ref('');
 const fileExplorerNewName = ref('');
 const fileExplorerNewContent = ref('');
 const fileExplorerContentOriginal = ref('');
+const fileExplorerSelectedPaths = ref([]);
+const uploadInputRef = ref(null);
+const filesUploading = ref(false);
+const filesCompressing = ref(false);
+const filesUncompressing = ref(false);
+const fileExplorerCompressName = ref('archive.zip');
 const fileExplorerBreadcrumb = computed(() => {
   const p = (fileExplorerPath.value || '').trim();
   return p ? p.split('/').filter(Boolean) : [];
+});
+
+const ARCHIVE_EXT = /\.(zip|tar|tar\.gz|tgz)$/i;
+function isArchive(entry) {
+  return entry && !entry.isDirectory && ARCHIVE_EXT.test(entry.name);
+}
+const selectedEntries = computed(() => {
+  const paths = fileExplorerSelectedPaths.value;
+  return fileExplorerEntries.value.filter((e) => paths.includes(e.path));
+});
+const isAllSelected = computed(() => {
+  const entries = fileExplorerEntries.value;
+  if (!entries.length) return false;
+  const paths = fileExplorerSelectedPaths.value;
+  return entries.every((e) => paths.includes(e.path));
+});
+const isSomeSelected = computed(() => fileExplorerSelectedPaths.value.length > 0);
+const canUncompressSelected = computed(() => {
+  const sel = selectedEntries.value;
+  if (!sel.length) return false;
+  return sel.every((e) => isArchive(e));
 });
 
 const activeTab = ref('overview');
@@ -703,6 +758,87 @@ async function createFileOrFolder() {
     fileExplorerContentError.value = e.message || 'Create failed';
   } finally {
     filesBusy.value = false;
+  }
+}
+
+function toggleSelect(path) {
+  const arr = fileExplorerSelectedPaths.value;
+  const i = arr.indexOf(path);
+  if (i >= 0) fileExplorerSelectedPaths.value = arr.filter((_, j) => j !== i);
+  else fileExplorerSelectedPaths.value = [...arr, path];
+}
+function toggleSelectAll() {
+  if (isAllSelected.value) fileExplorerSelectedPaths.value = [];
+  else fileExplorerSelectedPaths.value = fileExplorerEntries.value.map((e) => e.path);
+}
+function triggerUpload() {
+  uploadInputRef.value && uploadInputRef.value.click();
+}
+async function onUploadFiles(e) {
+  const input = e.target;
+  const fileList = input && input.files;
+  if (!fileList || !fileList.length) return;
+  filesUploading.value = true;
+  fileExplorerError.value = '';
+  try {
+    const data = await api.apps.files.upload(route.params.id, fileExplorerPath.value, Array.from(fileList));
+    setFeedback('success', `Uploaded ${data.count || 0} file(s).`);
+    loadFileList();
+    fileExplorerSelectedPaths.value = [];
+  } catch (err) {
+    fileExplorerError.value = err.message || 'Upload failed';
+    setFeedback('error', err.message || 'Upload failed');
+  } finally {
+    filesUploading.value = false;
+    if (input) input.value = '';
+  }
+}
+async function doCompressSelected() {
+  const paths = fileExplorerSelectedPaths.value;
+  if (!paths.length) return;
+  fileExplorerContentError.value = '';
+  fileExplorerCompressName.value = 'archive.zip';
+  fileExplorerModal.value = 'compress';
+}
+async function submitCompress() {
+  const paths = fileExplorerSelectedPaths.value;
+  const name = (fileExplorerCompressName.value || 'archive.zip').trim();
+  const archiveName = name.toLowerCase().endsWith('.zip') ? name : name + '.zip';
+  filesCompressing.value = true;
+  fileExplorerContentError.value = '';
+  try {
+    await api.apps.files.compress(route.params.id, paths, archiveName);
+    setFeedback('success', 'Archive created.');
+    fileExplorerModal.value = null;
+    loadFileList();
+    fileExplorerSelectedPaths.value = [];
+  } catch (e) {
+    fileExplorerContentError.value = e.message || 'Compress failed';
+  } finally {
+    filesCompressing.value = false;
+  }
+}
+async function doUncompressSelected() {
+  const paths = fileExplorerSelectedPaths.value;
+  if (!paths.length || !canUncompressSelected.value) return;
+  filesUncompressing.value = true;
+  fileExplorerError.value = '';
+  try {
+    const data = await api.apps.files.uncompress(route.params.id, paths);
+    const failed = (data.results || []).filter((r) => !r.ok);
+    if (failed.length) {
+      fileExplorerError.value = failed.map((r) => `${r.path}: ${r.error}`).join('; ');
+      setFeedback('error', 'Some extractions failed.');
+    } else {
+      setFeedback('success', 'Extraction completed.');
+    }
+    loadFileList();
+    fileExplorerSelectedPaths.value = [];
+  } catch (e) {
+    fileExplorerError.value = e.message || 'Extract failed';
+    setFeedback('error', e.message || 'Extract failed');
+  } finally {
+    filesUncompressing.value = false;
   }
 }
 
@@ -1239,6 +1375,28 @@ section.card + section.card {
   display: flex;
   gap: 0.5rem;
   margin-left: auto;
+}
+.files-upload-input {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+.files-table__th-check,
+.files-table__td-check {
+  width: 2.25rem;
+  padding-right: 0;
+  vertical-align: middle;
+}
+.files-table__check-label {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+.files-table__check-label input {
+  width: 1rem;
+  height: 1rem;
 }
 .files-table__row td {
   vertical-align: middle;

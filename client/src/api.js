@@ -189,6 +189,23 @@ export const api = {
       setContent: (id, filePath, content) => request(`/api/apps/${id}/files/content`, { method: 'PUT', body: JSON.stringify({ path: filePath, content }) }),
       create: (id, filePath, type, content) => request(`/api/apps/${id}/files`, { method: 'POST', body: JSON.stringify({ path: filePath, type: type || 'file', content: content || '' }) }),
       delete: (id, filePath) => request(`/api/apps/${id}/files?path=${encodeURIComponent(filePath)}`, { method: 'DELETE' }),
+      upload: async (id, dirPath, fileList) => {
+        const form = new FormData();
+        form.append('path', dirPath || '');
+        for (let i = 0; i < fileList.length; i++) form.append('files', fileList[i]);
+        const res = await fetch(`${base}/api/apps/${id}/files/upload`, {
+          method: 'POST',
+          credentials: 'include',
+          body: form,
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || res.statusText || 'Upload failed');
+        return data;
+      },
+      compress: (id, paths, archiveName) =>
+        request(`/api/apps/${id}/files/compress`, { method: 'POST', body: JSON.stringify({ paths, archiveName: archiveName || 'archive.zip' }) }),
+      uncompress: (id, paths) =>
+        request(`/api/apps/${id}/files/uncompress`, { method: 'POST', body: JSON.stringify({ paths }) }),
     },
   },
   system: {

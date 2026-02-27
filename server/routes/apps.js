@@ -2,7 +2,9 @@ import { Router } from 'express';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { execSync, spawnSync } from 'child_process';
 import multer from 'multer';
+import AdmZip from 'adm-zip';
 import * as db from '../db.js';
 import * as appManager from '../services/appManager.js';
 import * as nginx from '../services/nginx.js';
@@ -11,6 +13,7 @@ import { validateAppInput, validateName, validateDomain, validateCommand, valida
 export const appsRouter = Router();
 
 const ZIP_MAX_SIZE = 250 * 1024 * 1024; // 250MB
+const FILE_UPLOAD_MAX_SIZE = 250 * 1024 * 1024; // 250MB per file in file explorer
 const ZIP_UPLOAD_TIMEOUT_MS = 15 * 60 * 1000; // 15 min for slow uploads
 
 const upload = multer({
@@ -25,6 +28,12 @@ const upload = multer({
     cb(new Error('Only .zip files are allowed'));
   },
 });
+
+const fileExplorerUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: FILE_UPLOAD_MAX_SIZE },
+  fileFilter: (_, file, cb) => cb(null, true),
+}).array('files', 50);
 
 function appToJson(row) {
   if (!row) return null;
@@ -601,6 +610,133 @@ appsRouter.delete('/:id/files', (req, res, next) => {
       fs.unlinkSync(filePath);
     }
     res.json({ ok: true });
+  } catch (e) {
+    if (e.message && e.message.includes('outside')) return res.status(400).json({ error: e.message });
+    next(e);
+  }
+});
+
+const ARCHIVE_EXT = /\.(zip|tar|tar\.gz|tgz)$/i;
+
+appsRouter.post('/:id/files/upload', (req, res, next) => {
+  req.setTimeout(ZIP_UPLOAD_TIMEOUT_MS);
+  fileExplorerUpload(req, res, (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: 'File too large (max 250 MB per file)' });
+      return res.status(400).json({ error: err.message || 'Upload failed' });
+    }
+    try {
+      const app = db.getApp(req.params.id);
+      if (!app) return res.status(404).json({ error: 'App not found' });
+      const base = appManager.getAppDir(app);
+      const relDir = (req.body.path || '').trim().replace(/^\/*/, '');
+      const dirPath = resolveAppPath(app, relDir);
+      if (!fs.existsSync(dirPath)) return res.status(404).json({ error: 'Directory not found' });
+      const stat = fs.statSync(dirPath);
+      if (!stat.isDirectory()) return res.status(400).json({ error: 'Not a directory' });
+      const files = req.files || [];
+      const uploaded = [];
+      for (const file of files) {
+        const name = path.basename((file.originalname || '').trim() || 'file');
+        if (!name || name === '.' || name === '..' || name.includes('\0')) continue;
+        const targetPath = path.join(dirPath, name);
+        const resolvedTarget = path.resolve(targetPath);
+        if (!resolvedTarget.startsWith(path.resolve(base))) continue;
+        fs.writeFileSync(targetPath, file.buffer, 'binary');
+        uploaded.push(name);
+      }
+      res.status(201).json({ ok: true, uploaded, count: uploaded.length });
+    } catch (e) {
+      if (e.message && e.message.includes('outside')) return res.status(400).json({ error: e.message });
+      next(e);
+    }
+  });
+});
+
+appsRouter.post('/:id/files/uncompress', (req, res, next) => {
+  try {
+    const app = db.getApp(req.params.id);
+    if (!app) return res.status(404).json({ error: 'App not found' });
+    const paths = Array.isArray(req.body.paths) ? req.body.paths : [];
+    if (paths.length === 0) return res.status(400).json({ error: 'No paths provided' });
+    const base = appManager.getAppDir(app);
+    const results = [];
+    for (const rel of paths) {
+      const r = String(rel).trim().replace(/^\/*/, '');
+      if (!r || /\.\./.test(r)) continue;
+      const fullPath = resolveAppPath(app, r);
+      if (!fs.existsSync(fullPath)) {
+        results.push({ path: r, ok: false, error: 'Not found' });
+        continue;
+      }
+      const stat = fs.statSync(fullPath);
+      if (!stat.isFile()) {
+        results.push({ path: r, ok: false, error: 'Not a file' });
+        continue;
+      }
+      const lower = fullPath.toLowerCase();
+      const dir = path.dirname(fullPath);
+      try {
+        if (lower.endsWith('.zip')) {
+          const zip = new AdmZip(fullPath);
+          zip.extractAllTo(dir, true);
+          results.push({ path: r, ok: true });
+        } else if (lower.endsWith('.tar.gz') || lower.endsWith('.tgz') || lower.endsWith('.tar')) {
+          const result = spawnSync(
+            'tar',
+            lower.endsWith('.tar') ? ['-xf', fullPath, '-C', dir] : ['-xzf', fullPath, '-C', dir],
+            { maxBuffer: 50 * 1024 * 1024, encoding: 'utf-8' }
+          );
+          if (result.status !== 0) throw new Error(result.stderr || result.stdout || 'tar failed');
+          results.push({ path: r, ok: true });
+        } else {
+          results.push({ path: r, ok: false, error: 'Unsupported format (use .zip, .tar, .tar.gz, .tgz)' });
+        }
+      } catch (e) {
+        results.push({ path: r, ok: false, error: e.message || 'Extract failed' });
+      }
+    }
+    res.json({ ok: true, results });
+  } catch (e) {
+    if (e.message && e.message.includes('outside')) return res.status(400).json({ error: e.message });
+    next(e);
+  }
+});
+
+appsRouter.post('/:id/files/compress', (req, res, next) => {
+  try {
+    const app = db.getApp(req.params.id);
+    if (!app) return res.status(404).json({ error: 'App not found' });
+    const paths = Array.isArray(req.body.paths) ? req.body.paths : [];
+    if (paths.length === 0) return res.status(400).json({ error: 'No paths provided' });
+    const base = appManager.getAppDir(app);
+    let archiveName = (req.body.archiveName || 'archive.zip').trim().replace(/^\/*/, '');
+    if (!archiveName) archiveName = 'archive.zip';
+    if (!archiveName.toLowerCase().endsWith('.zip')) return res.status(400).json({ error: 'Archive name must end with .zip' });
+    const firstRel = String(paths[0]).trim().replace(/^\/*/, '');
+    const firstFull = resolveAppPath(app, firstRel);
+    const targetDir = path.dirname(firstFull);
+    if (!targetDir.startsWith(path.resolve(base))) return res.status(400).json({ error: 'Invalid path' });
+    const outPath = path.join(targetDir, path.basename(archiveName));
+    const resolvedOut = path.resolve(outPath);
+    if (!resolvedOut.startsWith(path.resolve(base))) return res.status(400).json({ error: 'Invalid archive path' });
+    const zip = new AdmZip();
+    for (const rel of paths) {
+      const r = String(rel).trim().replace(/^\/*/, '');
+      if (!r || /\.\./.test(r)) continue;
+      const fullPath = resolveAppPath(app, r);
+      if (!fs.existsSync(fullPath)) continue;
+      const stat = fs.statSync(fullPath);
+      const entryName = path.basename(fullPath);
+      if (stat.isDirectory()) {
+        zip.addLocalFolder(fullPath, entryName);
+      } else {
+        zip.addLocalFile(fullPath, r);
+      }
+    }
+    zip.writeZip(outPath);
+    const toSlash = (p) => p.split(path.sep).join('/');
+    res.json({ ok: true, path: toSlash(path.relative(base, outPath)) });
   } catch (e) {
     if (e.message && e.message.includes('outside')) return res.status(400).json({ error: e.message });
     next(e);
