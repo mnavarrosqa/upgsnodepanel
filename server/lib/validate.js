@@ -30,17 +30,22 @@ export function validateRepoUrl(url) {
   const s = url.trim();
   if (!s) return null;
   checkLength(s, MAX_LEN.repo_url, 'repo_url');
+  if (/[\s;|&$`'"]/.test(s)) {
+    throw new Error('repo_url contains invalid characters');
+  }
   try {
     const u = new URL(s);
-    if (u.protocol !== 'http:' && u.protocol !== 'https:') {
-      throw new Error('repo_url must be http or https');
+    if (u.protocol === 'http:' || u.protocol === 'https:' || u.protocol === 'ssh:') {
+      return s;
     }
-    if (/[\s;|&$`'"]/.test(s)) {
-      throw new Error('repo_url contains invalid characters');
-    }
-    return s;
+    throw new Error('repo_url must be http, https, or ssh');
   } catch (e) {
-    if (e instanceof TypeError) throw new Error('repo_url must be a valid URL');
+    if (e.message === 'repo_url must be http, https, or ssh') throw e;
+    if (e instanceof TypeError) {
+      const scpLike = /^[^@\s]+@[^:]+:[^\s;|&$`'"]+$/;
+      if (scpLike.test(s)) return s;
+      throw new Error('repo_url must be a valid URL');
+    }
     throw e;
   }
 }

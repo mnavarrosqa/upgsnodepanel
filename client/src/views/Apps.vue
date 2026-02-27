@@ -26,13 +26,36 @@
         </div>
         <template v-if="sourceType === 'git'">
         <div class="form-group">
+          <label>Repository visibility</label>
+          <div class="repo-visibility-options">
+            <label class="radio-label">
+              <input type="radio" v-model="repoVisibility" value="public" />
+              <span>Public</span>
+            </label>
+            <label class="radio-label">
+              <input type="radio" v-model="repoVisibility" value="private" />
+              <span>Private</span>
+            </label>
+          </div>
+        </div>
+        <div v-if="repoVisibility === 'private'" class="form-group private-repo-info">
+          <div class="private-repo-info__box">
+            <p class="private-repo-info__title">To clone a private repository you need one of the following:</p>
+            <ul class="private-repo-info__list">
+              <li><strong>HTTPS with token</strong> — Use a Personal Access Token (PAT) in the URL: <code>https://YOUR_TOKEN@github.com/user/repo.git</code>. Create a PAT with repo scope in GitHub (Settings → Developer settings) or GitLab (Preferences → Access Tokens). Do not share your token.</li>
+              <li><strong>SSH</strong> — Use an SSH URL: <code>git@github.com:user/repo.git</code>. Add the server’s SSH public key as a deploy key in the repository settings (GitHub: Settings → Deploy keys; GitLab: Settings → Repository → Deploy keys).</li>
+            </ul>
+            <p class="private-repo-info__note">“Suggest from repo” only works for public repos; for private repos fill install/build/start commands manually or use a preset.</p>
+          </div>
+        </div>
+        <div class="form-group">
           <label>Repository URL</label>
           <div class="field-with-help">
             <input
             v-model="form.repo_url"
-            type="url"
+            type="text"
             required
-            placeholder="https://github.com/user/repo.git"
+            placeholder="https://github.com/user/repo.git or git@github.com:user/repo.git"
             @blur="fetchDefaultBranchIfEmpty"
           />
             <span class="help-wrap">
@@ -330,6 +353,7 @@ const suggestLoading = ref(false);
 const suggestError = ref('');
 const openHelpId = ref(null);
 const helpPinned = ref(false);
+const repoVisibility = ref('public');
 
 const fieldHelp = {
   name: 'A short identifier for your app (e.g. my-app). Used in the app list and on the server.',
@@ -485,6 +509,7 @@ function closeForm() {
   domainCheckMessage.value = '';
   branchDetected.value = '';
   suggestError.value = '';
+  repoVisibility.value = 'public';
 }
 
 async function doStart(app) {
@@ -690,6 +715,7 @@ async function create() {
     showForm.value = false;
     form.value = { ...DEFAULT_FORM, node_version: nodeVersions.value[0] || DEFAULT_FORM.node_version };
     selectedPresetId.value = '';
+    repoVisibility.value = 'public';
     suggestError.value = '';
     zipFile.value = null;
     domainCheckStatus.value = '';
@@ -738,6 +764,47 @@ function closeCreationOverlay() {
   border-color: var(--accent);
   color: var(--accent);
   background: rgba(99, 102, 241, 0.1);
+}
+.repo-visibility-options {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.repo-visibility-options .radio-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+  font-weight: normal;
+}
+.private-repo-info__box {
+  padding: 1rem;
+  border-radius: var(--radius);
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+}
+.private-repo-info__title {
+  margin: 0 0 0.5rem;
+  font-weight: 600;
+  font-size: 0.9375rem;
+}
+.private-repo-info__list {
+  margin: 0 0 0.75rem;
+  padding-left: 1.25rem;
+}
+.private-repo-info__list li {
+  margin-bottom: 0.5rem;
+}
+.private-repo-info__list code {
+  font-size: 0.8125rem;
+  padding: 0.15rem 0.35rem;
+  border-radius: 3px;
+  background: var(--bg);
+}
+.private-repo-info__note {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
 }
 .form-hint {
   margin: 0.25rem 0 0;
