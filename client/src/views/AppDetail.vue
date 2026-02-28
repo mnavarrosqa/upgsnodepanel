@@ -117,14 +117,14 @@
 
               <div class="edit-form__section">
                 <h3 class="edit-form__section-title">Runtime &amp; commands</h3>
-                <div class="form-group">
-                  <label>Node version</label>
-                  <select v-if="nodeVersionOptions.length" v-model="edit.node_version">
-                    <option v-for="v in nodeVersionOptions" :key="v" :value="v">{{ v }}</option>
-                  </select>
-                  <span v-else class="form-static">{{ app.node_version || '—' }}</span>
-                </div>
-                <div class="form-row form-row--3">
+                <div class="edit-form__runtime-grid">
+                  <div class="form-group edit-form__node-version">
+                    <label>Node version</label>
+                    <select v-if="nodeVersionOptions.length" v-model="edit.node_version">
+                      <option v-for="v in nodeVersionOptions" :key="v" :value="v">{{ v }}</option>
+                    </select>
+                    <span v-else class="form-static">{{ app.node_version || '—' }}</span>
+                  </div>
                   <div class="form-group">
                     <label>Install command</label>
                     <input v-model="edit.install_cmd" type="text" placeholder="npm install" />
@@ -133,7 +133,7 @@
                     <label>Build command</label>
                     <input v-model="edit.build_cmd" type="text" placeholder="npm run build" />
                   </div>
-                  <div class="form-group">
+                  <div class="form-group edit-form__start-cmd">
                     <label>Start command</label>
                     <input v-model="edit.start_cmd" type="text" placeholder="npm start" />
                   </div>
@@ -1375,6 +1375,33 @@ async function doDelete() {
   margin: 0 0 0.75rem;
   padding-bottom: 0.35rem;
   border-bottom: 1px solid var(--border);
+}
+.edit-form__runtime-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 0;
+}
+.edit-form__runtime-grid .form-group {
+  margin-bottom: 0;
+}
+.edit-form__node-version {
+  grid-column: 1 / -1;
+}
+.edit-form__node-version + .form-group {
+  margin-bottom: 0;
+}
+.edit-form__start-cmd {
+  grid-column: 1 / -1;
+}
+@media (max-width: 640px) {
+  .edit-form__runtime-grid {
+    grid-template-columns: 1fr;
+  }
+  .edit-form__node-version,
+  .edit-form__start-cmd {
+    grid-column: 1;
+  }
 }
 .edit-form__note {
   font-size: 0.8125rem;
